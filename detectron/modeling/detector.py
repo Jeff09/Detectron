@@ -381,6 +381,36 @@ class DetectionModelHelper(cnn.CNNModelHelper):
         self.do_not_update_params.append(self.biases[-1])
         return blob
 
+    def ConvAffine_v2(  # args in the same order of Conv()
+        self, blob_in, prefix, dim_in, dim_out, kernel, stride, pad,
+        group=1, dilation=1,
+        weight_init=None,
+        bias_init=None,
+        suffix='_bn',
+        inplace=False
+    ):
+        """ConvAffine adds a Conv op followed by a AffineChannel op (which
+        replaces BN during fine tuning).
+        """
+        conv_blob = self.Conv(
+            blob_in,
+            prefix+'_conv'+suffix,
+            dim_in,
+            dim_out,
+            kernel,
+            stride=stride,
+            pad=pad,
+            group=group,
+            dilation=dilation,
+            weight_init=weight_init,
+            bias_init=bias_init,
+            no_bias=1
+        )
+        blob_out = self.AffineChannel(
+            conv_blob, prefix + '_bn'+suffix, dim=dim_out, inplace=inplace
+        )
+        return blob_out    
+
     def ConvAffine(  # args in the same order of Conv()
         self, blob_in, prefix, dim_in, dim_out, kernel, stride, pad,
         group=1, dilation=1,
