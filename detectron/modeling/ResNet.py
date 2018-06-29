@@ -149,6 +149,92 @@ def add_ResNet_roi_conv5_head(model, blob_in, dim_in, spatial_scale):
     s = model.AveragePool(s, 'res5_pool', kernel=7)
     return s, 2048
 
+def add_ResNet_roi_conv5_light_head(model, blob_in, dim_in, spatial_scale):
+    """Adds an RoI feature transformation (e.g., RoI pooling) followed by a
+    res5/conv5 head applied to each RoI."""
+    
+    dim_bottleneck = cfg.RESNETS.NUM_GROUPS * cfg.RESNETS.WIDTH_PER_GROUP
+    stride_init = int(cfg.FAST_RCNN.ROI_XFORM_RESOLUTION / 7)
+    s, dim_in = add_stage(
+        model, 'res5', blob_in, 3, dim_in, 2048, dim_bottleneck * 8, 2,
+        stride_init
+    )
+    x1_1 = model.Conv(
+        s,
+        'convx1_1',
+        dim_in,
+        256,
+        kernel=[15, 1],
+        pad_t = 7,
+        pad_b = 7,
+        pad_r = 0,
+        pad_l = 0,
+        stride=1,
+        weight_init=(cfg.MRCNN.CONV_INIT, {'std': 0.001}),
+        bias_init=('ConstantFill', {'value': 0.})
+    )
+    x1_1 = model.Relu(x1_1, x1_1)
+    x1_2 = model.Conv(
+        x1_1,
+        'convx1_2',
+        256,
+        490,
+        kernel=[1, 15],
+        pad_t = 0,
+        pad_b = 0,
+        pad_r = 7,
+        pad_l = 7,
+        stride=1,
+        weight_init=(cfg.MRCNN.CONV_INIT, {'std': 0.001}),
+        bias_init=('ConstantFill', {'value': 0.})
+    )
+    x1_2 = model.Relu(x1_2, x1_2)
+    x2_1 = model.Conv(
+        s,
+        'convx2_1',
+        dim_in,
+        256,
+        kernel=[1, 15],
+        pad_t = 0,
+        pad_b = 0,
+        pad_r = 7,
+        pad_l = 7,
+        stride=1,
+        weight_init=(cfg.MRCNN.CONV_INIT, {'std': 0.001}),
+        bias_init=('ConstantFill', {'value': 0.})
+    )
+    x2_1 = model.Relu(x2_1, x2_1)
+    x2_2 = model.Conv(
+        x2_1,
+        'convx2_2',
+        256,
+        490,
+        kernel=[15, 1],
+        pad_t = 7,
+        pad_b = 7,
+        pad_r = 0,
+        pad_l = 0,
+        stride=1,
+        weight_init=(cfg.MRCNN.CONV_INIT, {'std': 0.001}),
+        bias_init=('ConstantFill', {'value': 0.})
+    )
+    x2_2 = model.Relu(x2_2, x2_2)
+    light_head = model.net.Sum(['convx1_2', 'convx2_2'], 'light_head') 
+    
+    roi_feat = model.RoIFeatureTransform(
+        light_head,
+        'pool5',
+        blob_rois='rois',
+        method=cfg.FAST_RCNN.ROI_XFORM_METHOD,
+        resolution=cfg.FAST_RCNN.ROI_XFORM_RESOLUTION,
+        sampling_ratio=cfg.FAST_RCNN.ROI_XFORM_SAMPLING_RATIO,
+        spatial_scale=spatial_scale
+    )
+    roi_size = cfg.FAST_RCNN.ROI_XFORM_RESOLUTION
+    fc7 = model.FC(roi_feat, 'fc7', 490 * roi_size * roi_size, 2048)
+    fc7 = model.Relu('fc7', 'fc7')
+    return fc7, 2048
+
 
 def add_residual_block(
     model,
