@@ -1,6 +1,4 @@
-#!/usr/bin/env python2
-
-# Copyright (c) 2017-present, Facebook, Inc.
+#copyright (c) 2017-present, Facebook, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -32,6 +30,7 @@ import logging
 import os
 import sys
 import time
+import re
 
 from caffe2.python import workspace
 
@@ -42,7 +41,7 @@ from detectron.utils.io import cache_url
 from detectron.utils.logging import setup_logging
 from detectron.utils.timer import Timer
 import detectron.core.test_engine as infer_engine
-import detectron.datasets.dummy_datasets as dummy_datasets
+import detectron.datasets.wider_datasets as wider_datasets
 import detectron.utils.c2 as c2_utils
 import detectron.utils.vis as vis_utils
 
@@ -84,19 +83,20 @@ def parse_args():
         type=str
     )
     parser.add_argument(
-        '--always-out',
-        dest='out_when_no_box',
-        help='output image even when no object is found',
-        action='store_true'
-    )
-    parser.add_argument(
         'im_or_folder', help='image or folder of images', default=None
     )
     parser.add_argument(
-        '--output-ext',
-        dest='output_ext',
-        help='output image file format (default: pdf)',
-        default='pdf',
+        '--test',
+        dest='test',
+        help='T or V',
+        default='T',
+        type=str
+    )
+    parser.add_argument(
+        '--model-name',
+        dest='model_name',
+        help='Model Name',
+        default='Model_final',
         type=str
     )
     if len(sys.argv) == 1:
@@ -107,9 +107,8 @@ def parse_args():
 
 def main(args):
     logger = logging.getLogger(__name__)
-
     merge_cfg_from_file(args.cfg)
-    cfg.NUM_GPUS = 1
+    cfg.NUM_GPUS = 2
     args.weights = cache_url(args.weights, cfg.DOWNLOAD_CACHE)
     assert_and_infer_cfg(cache_urls=False)
 
@@ -119,7 +118,40 @@ def main(args):
         'Models that require precomputed proposals are not supported'
 
     model = infer_engine.initialize_model_from_cfg(args.weights)
-    dummy_coco_dataset = dummy_datasets.get_coco_dataset()
+    dummy_wider_dataset = wider_datasets.get_wider_dataset()
+
+    INFER_BOX_ALPHA = 0.3
+    INFER_THRESH = 0.6
+    INFER_KP_THRESH = 2
+    if "model_iter" in args.weights:
+        # MODEL_ITER = str(re.match(r"(.*)model_iter(.*)\.pkl", args.weights).group(2))
+        MODEL_ITER = str(re.match(r"(.*)model_iter(.*)\.pkl", args.weights).group(2))
+    else:
+        MODEL_ITER = "90000"
+
+    logger.info("Model Iter: {}".format(MODEL_ITER))
+
+    if args.test == "T":
+        submit_mode = "test"
+    elif args.test == "V":
+        submit_mode = "val"
+    else:
+        submit_mode = "default"
+
+    submit_result = []
+    result_file_name = 'detectron_{}_result_{}_{}_' \
+                       'NMS_{}_RPN_NMS_THRESH_{}_BBOX_VOTE_{}_' \
+                       'PRE_NMS_{}_BBOX_REG_{}_' \
+                       'Thresh_{}_BoxNumber.txt'.format(
+        submit_mode,
+        args.model_name,
+        MODEL_ITER,
+        cfg.TEST.NMS,
+        cfg.TEST.RPN_NMS_THRESH,
+        cfg.TEST.BBOX_VOTE.ENABLED,
+        cfg.TEST.RPN_PRE_NMS_TOP_N,
+        cfg.TEST.BBOX_REG,
+        INFER_THRESH)
 
     if os.path.isdir(args.im_or_folder):
         im_list = glob.iglob(args.im_or_folder + '/*.' + args.image_ext)
@@ -128,7 +160,7 @@ def main(args):
 
     for i, im_name in enumerate(im_list):
         out_name = os.path.join(
-            args.output_dir, '{}'.format(os.path.basename(im_name) + '.' + args.output_ext)
+            args.output_dir, '{}'.format(os.path.basename(im_name) + '.pdf')
         )
         logger.info('Processing {} -> {}'.format(im_name, out_name))
         im = cv2.imread(im_name)
@@ -138,7 +170,7 @@ def main(args):
             cls_boxes, cls_segms, cls_keyps = infer_engine.im_detect_all(
                 model, im, None, timers=timers
             )
-	logger.info('BBOX: {}'.format(cls_boxes))
+
         logger.info('Inference time: {:.3f}s'.format(time.time() - t))
         for k, v in timers.items():
             logger.info(' | {}: {:.3f}s'.format(k, v.average_time))
@@ -148,21 +180,31 @@ def main(args):
                 'rest (caches and auto-tuning need to warm up)'
             )
 
-        vis_utils.vis_one_image(
+        result = vis_utils.vis_one_image_bbox_2_class(
             im[:, :, ::-1],  # BGR -> RGB for visualization
             im_name,
             args.output_dir,
             cls_boxes,
             cls_segms,
             cls_keyps,
-            dataset=dummy_coco_dataset,
-            box_alpha=0.3,
-            show_class=True,
-            thresh=0.7,
-            kp_thresh=2,
-            ext=args.output_ext,
-            out_when_no_box=args.out_when_no_box
+            dataset=dummy_wider_dataset,
+            box_alpha=INFER_BOX_ALPHA,
+            show_class=False,
+            thresh=INFER_THRESH,
+            kp_thresh=INFER_KP_THRESH
         )
+        if result:
+            submit_result.extend(result)
+        logger.info('Image {}.'.format(i))
+
+    # Write file
+    with open(result_file_name, 'wb') as result_file:
+        for item in submit_result:
+            result_file.write("%s\n" % item)
+
+    logger.info(
+        'The result file has been written in {}'.format(result_file_name)
+    )
 
 
 if __name__ == '__main__':
