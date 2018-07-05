@@ -69,6 +69,7 @@ def add_rpn_blobs(blobs, im_scales, roidb):
         for lvl in range(k_min, k_max + 1):
             field_stride = 2.**lvl
             anchor_sizes = (cfg.FPN.RPN_ANCHOR_START_SIZE * 2.**(lvl - k_min), )
+            #field_stride = min(16., 2.**lvl)
             anchor_aspect_ratios = cfg.FPN.RPN_ASPECT_RATIOS
             foa = data_utils.get_field_of_anchors(
                 field_stride, anchor_sizes, anchor_aspect_ratios
