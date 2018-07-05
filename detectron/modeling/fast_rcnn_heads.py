@@ -188,7 +188,7 @@ def add_cascade_rcnn_losses(model, thresh, i):
         model.AddLosses(['loss_cls_stage_1', 'loss_bbox_stage_1'])
         model.AddMetrics('accuracy_cls_stage_1')
     elif i == 1:
-        #get_labels(i)      
+        #get_labels(i)
         cls_prob_stage_2, loss_cls_stage_2 = model.net.SoftmaxWithLoss(
             ['cls_score_stage_2', 'labels_stage_2'], ['cls_prob_stage_2', 'loss_cls_stage_2'],
             scale=model.GetLossScale()
@@ -226,31 +226,6 @@ def add_cascade_rcnn_losses(model, thresh, i):
 
     return loss_gradients
 
-def get_labels(i):    
-    label_boxes = workspace.FetchBlob(core.ScopedName("labels_int32"))
-    gt_boxes = workspace.FetchBlob("bbox_targets") 
-    pred_boxes_stage_1 = workspace.FetchBlob('bbox_pred_stage_'+str(i))
-    num_inside = pred_boxes_stage_1.shape[0]
-    labels = np.empty((num_inside, ), dtype=np.int32)
-    labels.fill(0)
-    if len(gt_boxes) > 0:
-        # Compute overlaps between the anchors and the gt boxes overlaps
-        anchor_by_gt_overlap = box_utils.bbox_overlaps(pred_boxes_stage_1, gt_boxes)
-        # Map from anchor to gt box that has highest overlap
-        anchor_to_gt_argmax = anchor_by_gt_overlap.argmax(axis=1)
-        # For each anchor, amount of overlap with most overlapping gt box
-        anchor_to_gt_max = anchor_by_gt_overlap[np.arange(num_inside),
-                                                anchor_to_gt_argmax]
-        # Fg label: above threshold IOU
-        labels = np.array([label_boxes[i] for i in anchor_to_gt_argmax], dtype=np.int32)
-    workspace.FeedBlob("labels_stage_"+str(i+1), labels)
-
-
-
-
-# ---------------------------------------------------------------------------- #
-# Box heads
-# ---------------------------------------------------------------------------- #
 
 def add_cascade_rcnn_head(model, blob_in, dim_in, spatial_scale, i):
     """Add a ReLU MLP with two hidden layers."""
@@ -303,6 +278,36 @@ def add_cascade_rcnn_head(model, blob_in, dim_in, spatial_scale, i):
         model.Relu('fc7_stage_3', 'fc7_stage_3')
         output = 'fc7_stage_3'
     return output, hidden_dim
+
+
+def add_cascade_rcnn_box_head(model, blob_in, dim_in, spatial_scale, i):
+    """Add a ReLU MLP with two hidden layers."""
+    hidden_dim = cfg.FAST_RCNN.MLP_HEAD_DIM
+    roi_size = cfg.FAST_RCNN.ROI_XFORM_RESOLUTION
+    thresholds = cfg.CASCADE_THRESHOLDS
+    thresholds = thresholds.split(",")
+    assert i < 3
+    if i == 0:
+        input_boxes = 'rois'
+    elif i == 1:
+        input_boxes = 'bbox_pred_stage_1'
+    elif i == 2:
+        input_boxes = 'bbox_pred_stage_2'
+    roi_feat = model.RoIFeatureTransform(
+        blob_in,
+        'roi_feat',
+        blob_rois=input_boxes,
+        method=cfg.FAST_RCNN.ROI_XFORM_METHOD,
+        resolution=roi_size,
+        sampling_ratio=cfg.FAST_RCNN.ROI_XFORM_SAMPLING_RATIO,
+        spatial_scale=spatial_scale
+    )
+    model.FC(roi_feat, 'fc6', dim_in * roi_size * roi_size, hidden_dim)
+    model.Relu('fc6', 'fc6')
+    model.FC('fc6', 'fc7', hidden_dim, hidden_dim)
+    model.Relu('fc7', 'fc7')
+    return 'fc7', hidden_dim
+
 
 def add_roi_2mlp_head(model, blob_in, dim_in, spatial_scale):
     """Add a ReLU MLP with two hidden layers."""
