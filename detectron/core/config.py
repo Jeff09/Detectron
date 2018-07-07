@@ -190,7 +190,7 @@ __C.TRAIN.FREEZE_CONV_BODY = False
 
 # Training will resume from the latest snapshot (model checkpoint) found in the
 # output directory
-__C.TRAIN.AUTO_RESUME = True
+__C.TRAIN.AUTO_RESUME = False
 
 # Add StopGrad at a specified stage so the bottom layers are frozen
 __C.TRAIN.FREEZE_AT = 2
