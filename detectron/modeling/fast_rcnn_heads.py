@@ -285,25 +285,51 @@ def add_cascade_rcnn_head(model, blob_in, dim_in, spatial_scale, i):
     roi_size = cfg.FAST_RCNN.ROI_XFORM_RESOLUTION
     assert i < 3
     if i == 0:
-        input_boxes = 'rois'
+        roi_feat_stage_1 = model.RoIFeatureTransform(
+            blob_in,
+            'roi_feat_stage_1',
+            blob_rois='rois',
+            method=cfg.FAST_RCNN.ROI_XFORM_METHOD,
+            resolution=roi_size,
+            sampling_ratio=cfg.FAST_RCNN.ROI_XFORM_SAMPLING_RATIO,
+            spatial_scale=spatial_scale
+        )
+        model.FC(roi_feat_stage_1, 'fc6_stage_1', dim_in * roi_size * roi_size, hidden_dim, weight_init=gauss_fill(0.01), bias_init=const_fill(0.0))
+        model.Relu('fc6_stage_1', 'fc6_stage_1')
+        model.FC('fc6_stage_1', 'fc7_stage_1', hidden_dim, hidden_dim, weight_init=gauss_fill(0.01), bias_init=const_fill(0.0))
+        model.Relu('fc7_stage_1', 'fc7_stage_1')
+        output = 'fc7_stage_1'
     elif i == 1:
-        input_boxes = 'bbox_pred_stage_1'
+        roi_feat_stage_2 = model.RoIFeatureTransform(
+            blob_in,
+            'roi_feat_stage_2',
+            blob_rois='bbox_pred_stage_1',
+            method=cfg.FAST_RCNN.ROI_XFORM_METHOD,
+            resolution=roi_size,
+            sampling_ratio=cfg.FAST_RCNN.ROI_XFORM_SAMPLING_RATIO,
+            spatial_scale=spatial_scale
+        )
+        model.FC(roi_feat_stage_2, 'fc6_stage_2', dim_in * roi_size * roi_size, hidden_dim, weight_init=gauss_fill(0.01), bias_init=const_fill(0.0))
+        model.Relu('fc6_stage_2', 'fc6_stage_2')
+        model.FC('fc6_stage_2', 'fc7_stage_2', hidden_dim, hidden_dim, weight_init=gauss_fill(0.01), bias_init=const_fill(0.0))
+        model.Relu('fc7_stage_2', 'fc7_stage_2')
+        output = 'fc7_stage_2'
     elif i == 2:
-        input_boxes = 'bbox_pred_stage_2'
-    roi_feat = model.RoIFeatureTransform(
-        blob_in,
-        'roi_feat',
-        blob_rois=input_boxes,
-        method=cfg.FAST_RCNN.ROI_XFORM_METHOD,
-        resolution=roi_size,
-        sampling_ratio=cfg.FAST_RCNN.ROI_XFORM_SAMPLING_RATIO,
-        spatial_scale=spatial_scale
-    )
-    model.FC(roi_feat, 'fc6', dim_in * roi_size * roi_size, hidden_dim, weight_init=gauss_fill(0.01), bias_init=const_fill(0.0))
-    model.Relu('fc6', 'fc6')
-    model.FC('fc6', 'fc7', hidden_dim, hidden_dim, weight_init=gauss_fill(0.01), bias_init=const_fill(0.0))
-    model.Relu('fc7', 'fc7')
-    return 'fc7', hidden_dim
+        roi_feat_stage_3 = model.RoIFeatureTransform(
+            blob_in,
+            'roi_feat_stage_3',
+            blob_rois='bbox_pred_stage_2',
+            method=cfg.FAST_RCNN.ROI_XFORM_METHOD,
+            resolution=roi_size,
+            sampling_ratio=cfg.FAST_RCNN.ROI_XFORM_SAMPLING_RATIO,
+            spatial_scale=spatial_scale
+        )
+        model.FC(roi_feat_stage_3, 'fc6_stage_3', dim_in * roi_size * roi_size, hidden_dim, weight_init=gauss_fill(0.01), bias_init=const_fill(0.0))
+        model.Relu('fc6_stage_3', 'fc6_stage_3')
+        model.FC('fc6_stage_3', 'fc7_stage_3', hidden_dim, hidden_dim, weight_init=gauss_fill(0.01), bias_init=const_fill(0.0))
+        model.Relu('fc7_stage_3', 'fc7_stage_3')
+        output = 'fc7_stage_3'
+    return output, hidden_dim
 
 
 def add_roi_2mlp_head(model, blob_in, dim_in, spatial_scale):
