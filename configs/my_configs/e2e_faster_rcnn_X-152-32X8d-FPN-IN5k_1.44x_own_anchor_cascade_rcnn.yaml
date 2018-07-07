@@ -11,7 +11,7 @@ SOLVER:
   # 1.44x schedule (note TRAIN.IMS_PER_BATCH: 1)
   BASE_LR: 0.001
   GAMMA: 0.1
-  MAX_ITER: 200
+  MAX_ITER: 260000
   STEPS: [0, 160000, 220000]
 FPN:
   FPN_ON: True
@@ -43,7 +43,6 @@ TRAIN:
 TEST:
   DATASETS: ('coco_2014_minival',)
   SCALE: 832
-  MAX_SIZE: 1664
   NMS: 0.5
   BBOX_VOTE:
     ENABLED: True
