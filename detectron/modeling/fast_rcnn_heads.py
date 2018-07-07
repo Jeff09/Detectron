@@ -188,9 +188,9 @@ def add_cascade_rcnn_losses(model, thresh, i):
         model.AddLosses(['loss_cls_stage_1', 'loss_bbox_stage_1'])
         model.AddMetrics('accuracy_cls_stage_1')
     elif i == 1:
-        get_labels(i)      
+        #get_labels(i)      
         cls_prob_stage_2, loss_cls_stage_2 = model.net.SoftmaxWithLoss(
-            ['cls_score_stage_2', 'labels_stage_2'], ['cls_prob_stage_2', 'loss_cls_stage_2'],
+            ['cls_score_stage_2', 'labels_int32'], ['cls_prob_stage_2', 'loss_cls_stage_2'],
             scale=model.GetLossScale()
         )
         loss_bbox_stage_2 = model.net.SmoothL1Loss(
@@ -206,9 +206,9 @@ def add_cascade_rcnn_losses(model, thresh, i):
         model.AddLosses(['loss_cls_stage_2', 'loss_bbox_stage_2'])
         model.AddMetrics('accuracy_cls_stage_2')
     elif i == 2:
-        get_labels(i)
+        #get_labels(i)
         cls_prob_stage_3, loss_cls_stage_3 = model.net.SoftmaxWithLoss(
-            ['cls_score_stage_3', 'labels_stage_3'], ['cls_prob_stage_3', 'loss_cls_stage_3'],
+            ['cls_score_stage_3', 'labels_int32'], ['cls_prob_stage_3', 'loss_cls_stage_3'],
             scale=model.GetLossScale()
         )
         loss_bbox_stage_3 = model.net.SmoothL1Loss(
@@ -252,12 +252,10 @@ def get_labels(i):
 # Box heads
 # ---------------------------------------------------------------------------- #
 
-def add_cascade_rcnn_box_head(model, blob_in, dim_in, spatial_scale, i):
+def add_cascade_rcnn_head(model, blob_in, dim_in, spatial_scale, i):
     """Add a ReLU MLP with two hidden layers."""
     hidden_dim = cfg.FAST_RCNN.MLP_HEAD_DIM
     roi_size = cfg.FAST_RCNN.ROI_XFORM_RESOLUTION
-    thresholds = cfg.CASCADE_THRESHOLDS
-    thresholds = thresholds.split(",")
     assert i < 3
     if i == 0:
         input_boxes = 'rois'
@@ -274,9 +272,9 @@ def add_cascade_rcnn_box_head(model, blob_in, dim_in, spatial_scale, i):
         sampling_ratio=cfg.FAST_RCNN.ROI_XFORM_SAMPLING_RATIO,
         spatial_scale=spatial_scale
     )
-    model.FC(roi_feat, 'fc6', dim_in * roi_size * roi_size, hidden_dim)
+    model.FC(roi_feat, 'fc6', dim_in * roi_size * roi_size, hidden_dim, weight_init=gauss_fill(0.01), bias_init=const_fill(0.0))
     model.Relu('fc6', 'fc6')
-    model.FC('fc6', 'fc7', hidden_dim, hidden_dim)
+    model.FC('fc6', 'fc7', hidden_dim, hidden_dim, weight_init=gauss_fill(0.01), bias_init=const_fill(0.0))
     model.Relu('fc7', 'fc7')
     return 'fc7', hidden_dim
 

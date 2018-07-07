@@ -269,12 +269,12 @@ def _add_cascade_rcnn_head(
 ):
     """Add a Cascade R-CNN head to the model"""
     # Fast R-CNN head to the model
-    thresholds = cfg.CASCADE_THRESHOLDS
-    thresholds = thresholds.split(",")
+    thresholds = cfg.TRAIN.CASCADE_THRESHOLDS
+    #thresholds = thresholds.split(",")
     assert len(thresholds) == 3
     loss_gradients = {}
     for i in range(len(thresholds)):
-        blob_frcn, dim_frcn = fast_rcnn_heads.add_cascade_rcnn_box_head(model, blob_in, dim_in, spatial_scale_in, i)
+        blob_frcn, dim_frcn = fast_rcnn_heads.add_cascade_rcnn_head(model, blob_in, dim_in, spatial_scale_in, i)
         fast_rcnn_heads.add_cascade_rcnn_outputs(model, blob_frcn, dim_frcn, i)
         if model.train:
             loss_gradients.update(fast_rcnn_heads.add_cascade_rcnn_losses(model, int(thresholds[i]), i))
