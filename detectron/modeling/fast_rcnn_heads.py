@@ -188,7 +188,7 @@ def add_cascade_rcnn_losses(model, thresh, i):
         model.AddLosses(['loss_cls_stage_1', 'loss_bbox_stage_1'])
         model.AddMetrics('accuracy_cls_stage_1')
     elif i == 1:
-        #get_labels(i)      
+        get_labels(model, i)      
         cls_prob_stage_2, loss_cls_stage_2 = model.net.SoftmaxWithLoss(
             ['cls_score_stage_2', 'labels_int32'], ['cls_prob_stage_2', 'loss_cls_stage_2'],
             scale=model.GetLossScale()
@@ -206,7 +206,7 @@ def add_cascade_rcnn_losses(model, thresh, i):
         model.AddLosses(['loss_cls_stage_2', 'loss_bbox_stage_2'])
         model.AddMetrics('accuracy_cls_stage_2')
     elif i == 2:
-        #get_labels(i)
+        get_labels(model, i)
         cls_prob_stage_3, loss_cls_stage_3 = model.net.SoftmaxWithLoss(
             ['cls_score_stage_3', 'labels_int32'], ['cls_prob_stage_3', 'loss_cls_stage_3'],
             scale=model.GetLossScale()
@@ -226,10 +226,10 @@ def add_cascade_rcnn_losses(model, thresh, i):
 
     return loss_gradients
 
-def get_labels(i):
-    label_boxes = workspace.FetchBlob("labels_int32")
-    gt_boxes = workspace.FetchBlob("bbox_targets") 
-    pred_boxes_stage_1 = workspace.FetchBlob('bbox_pred_stage_'+str(i))
+def get_labels(model, i):
+    label_boxes = workspace.FetchBlob(core.ScopedName("labels_int32"))
+    gt_boxes = workspace.FetchBlob(core.ScopedName("bbox_targets"))
+    pred_boxes_stage_1 = workspace.FetchBlob(core.ScopedName('bbox_pred_stage_'+str(i)))
     num_inside = pred_boxes_stage_1.shape[0]
     labels = np.empty((num_inside, ), dtype=np.int32)
     labels.fill(0)
@@ -243,7 +243,9 @@ def get_labels(i):
                                                 anchor_to_gt_argmax]
         # Fg label: above threshold IOU
         labels = np.array([label_boxes[i] for i in anchor_to_gt_argmax], dtype=np.int32)
-    workspace.FeedBlob("labels_stage_"+str(i+1), labels)
+    workspace.FeedBlob(core.ScopedName("labels_stage_"+str(i+1)), labels)
+    workspace.RunNet(model.net.Proto().name)
+
 
 
 
