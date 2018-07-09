@@ -134,6 +134,9 @@ __C.TRAIN.PROPOSAL_FILES = ()
 # faster)
 __C.TRAIN.ASPECT_GROUPING = True
 
+# Cascade IoU thresholds
+__C.TRAIN.CASCADE_THRESHOLDS = 0.5, 0.6, 0.7
+
 # ---------------------------------------------------------------------------- #
 # RPN training options
 # ---------------------------------------------------------------------------- #
@@ -187,10 +190,7 @@ __C.TRAIN.FREEZE_CONV_BODY = False
 
 # Training will resume from the latest snapshot (model checkpoint) found in the
 # output directory
-__C.TRAIN.AUTO_RESUME = True
-
-# Training will copy TRAIN.WEIGHTS and treat it as a candidate checkpoint
-__C.TRAIN.COPY_WEIGHTS = False
+__C.TRAIN.AUTO_RESUME = False
 
 # Add StopGrad at a specified stage so the bottom layers are frozen
 __C.TRAIN.FREEZE_AT = 2

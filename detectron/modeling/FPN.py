@@ -180,7 +180,8 @@ def add_fpn(model, fpn_level_info):
             lateral_input_blobs[i + 1],  # lateral blob
             output_blobs[i + 1],         # next output blob
             fpn_dim,                     # output dimension
-            fpn_dim_lateral[i + 1]       # lateral input dimension
+            fpn_dim_lateral[i + 1],       # lateral input dimension
+            i
         )
 
     # Post-hoc scale-specific 3x3 convs
@@ -257,9 +258,15 @@ def add_fpn(model, fpn_level_info):
 
 
 def add_topdown_lateral_module(
-    model, fpn_top, fpn_lateral, fpn_bottom, dim_top, dim_lateral
+    model, fpn_top, fpn_lateral, fpn_bottom, dim_top, dim_lateral, i
 ):
     """Add a top-down lateral module."""
+    print("levle ", i)
+    print("fpn_top:", fpn_top)
+    print("fpn_lateral:", fpn_lateral)
+    print("fpn_bottom:", fpn_bottom)
+    print("dim_lateral:", dim_lateral)
+    print("dim_top:", dim_top)
     # Lateral 1x1 conv
     if cfg.FPN.USE_GN:
         # use GroupNorm
@@ -292,10 +299,14 @@ def add_topdown_lateral_module(
             ),
             bias_init=const_fill(0.0)
         )
-    # Top-down 2x upsampling
-    td = model.net.UpsampleNearest(fpn_top, fpn_bottom + '_topdown', scale=2)
+    if i == 0 and  cfg.RESNETS.RES5_DILATION == 2:
+        td = model.net.UpsampleNearest(fpn_top, fpn_bottom + '_topdown', scale=1)
+        model.net.Sum([lat, td], fpn_bottom)
+    else:
+        # Top-down 2x upsampling
+        td = model.net.UpsampleNearest(fpn_top, fpn_bottom + '_topdown', scale=2)
     # Sum lateral and top-down
-    model.net.Sum([lat, td], fpn_bottom)
+        model.net.Sum([lat, td], fpn_bottom)
 
 
 def get_min_max_levels():
@@ -553,11 +564,18 @@ def fpn_level_info_ResNet50_conv5():
 
 
 def fpn_level_info_ResNet101_conv5():
-    return FpnLevelInfo(
-        blobs=('res5_2_sum', 'res4_22_sum', 'res3_3_sum', 'res2_2_sum'),
-        dims=(2048, 1024, 512, 256),
-        spatial_scales=(1. / 32., 1. / 16., 1. / 8., 1. / 4.)
-    )
+    if cfg.RESNETS.RES5_DILATION == 2:
+        return FpnLevelInfo(
+            blobs=('res5_2_sum', 'res4_22_sum', 'res3_3_sum', 'res2_2_sum'),
+            dims=(2048, 1024, 512, 256),
+            spatial_scales=(1. / 16., 1. / 16., 1. / 8., 1. / 4.)
+        )
+    elif cfg.RESNETS.RES5_DILATION == 1:
+        return FpnLevelInfo(
+            blobs=('res5_2_sum', 'res4_22_sum', 'res3_3_sum', 'res2_2_sum'),
+            dims=(2048, 1024, 512, 256),
+            spatial_scales=(1. / 32., 1. / 16., 1. / 8., 1. / 4.)
+        )
 
 
 def fpn_level_info_ResNet152_conv5():
