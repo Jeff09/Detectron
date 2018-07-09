@@ -190,7 +190,7 @@ def add_cascade_rcnn_losses(model, thresh, i):
     elif i == 1:
         get_labels(model, i)      
         cls_prob_stage_2, loss_cls_stage_2 = model.net.SoftmaxWithLoss(
-            ['cls_score_stage_2', 'labels_int32'], ['cls_prob_stage_2', 'loss_cls_stage_2'],
+            ['cls_score_stage_2', 'labels_stage_2'], ['cls_prob_stage_2', 'loss_cls_stage_2'],
             scale=model.GetLossScale()
         )
         loss_bbox_stage_2 = model.net.SmoothL1Loss(
@@ -208,7 +208,7 @@ def add_cascade_rcnn_losses(model, thresh, i):
     elif i == 2:
         get_labels(model, i)
         cls_prob_stage_3, loss_cls_stage_3 = model.net.SoftmaxWithLoss(
-            ['cls_score_stage_3', 'labels_int32'], ['cls_prob_stage_3', 'loss_cls_stage_3'],
+            ['cls_score_stage_3', 'labels_stage_3'], ['cls_prob_stage_3', 'loss_cls_stage_3'],
             scale=model.GetLossScale()
         )
         loss_bbox_stage_3 = model.net.SmoothL1Loss(
@@ -229,13 +229,13 @@ def add_cascade_rcnn_losses(model, thresh, i):
 def get_labels(model, i):
     label_boxes = workspace.FetchBlob(core.ScopedName("labels_int32"))
     gt_boxes = workspace.FetchBlob(core.ScopedName("bbox_targets"))
-    pred_boxes_stage_1 = workspace.FetchBlob(core.ScopedName('bbox_pred_stage_'+str(i)))
-    num_inside = pred_boxes_stage_1.shape[0]
+    pred_boxes = workspace.FetchBlob(core.ScopedName('bbox_pred_stage_'+str(i)))
+    num_inside = pred_boxes.shape[0]
     labels = np.empty((num_inside, ), dtype=np.int32)
     labels.fill(0)
     if len(gt_boxes) > 0:
         # Compute overlaps between the anchors and the gt boxes overlaps
-        anchor_by_gt_overlap = box_utils.bbox_overlaps(pred_boxes_stage_1, gt_boxes)
+        anchor_by_gt_overlap = box_utils.bbox_overlaps(pred_boxes, gt_boxes)
         # Map from anchor to gt box that has highest overlap
         anchor_to_gt_argmax = anchor_by_gt_overlap.argmax(axis=1)
         # For each anchor, amount of overlap with most overlapping gt box
