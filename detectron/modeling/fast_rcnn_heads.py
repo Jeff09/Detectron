@@ -40,6 +40,7 @@ import detectron.utils.blob as blob_utils
 import detectron.utils.boxes as box_utils
 from caffe2.python import core, workspace
 import numpy as np
+import detectron.modeling.FPN as fpn
 
 # ---------------------------------------------------------------------------- #
 # Fast R-CNN outputs and losses
@@ -247,6 +248,18 @@ def get_labels(model, i):
     workspace.RunNet(model.net.Proto().name)
 
 
+def add_multilevel_pred_box_blob(model, blob_in, pred_boxes_name):
+    '''
+    Add pred box blobs for multiple FPN levels to the blobs dict.
+    parameters: 
+        blob_in: a dict mapping from blob name to numpy ndarray
+        pred_boxes_name: 'bbox_pred_stage_1' or bbox_pred_stage_2'
+    '''
+    lvl_min = cfg.FPN.RPN_MIN_LEVEL
+    lvl_max = cfg.FPN.RPN_MAX_LEVEL
+    pred_boxes = workspace.FetchBlob(pred_boxes_name)
+    lvs = fpn.map_rois_to_fpn_levels(pred_boxes, lvl_min, lvl_max)
+    fpn.add_multilevel_roi_blobs(blob_in, pred_boxes_name, pred_boxes, lvs, lvl_min, lvl_max)
 
 
 
@@ -275,6 +288,8 @@ def add_cascade_rcnn_head(model, blob_in, dim_in, spatial_scale, i):
         model.Relu('fc7_stage_1', 'fc7_stage_1')
         output = 'fc7_stage_1'
     elif i == 1:
+        # map bbox_pred_stage_1 to fpn conv feature map
+        add_multilevel_pred_box_blob(model, blob_in, 'bbox_pred_stage_1')
         roi_feat_stage_2 = model.RoIFeatureTransform(
             blob_in,
             'roi_feat_stage_2',
@@ -290,6 +305,7 @@ def add_cascade_rcnn_head(model, blob_in, dim_in, spatial_scale, i):
         model.Relu('fc7_stage_2', 'fc7_stage_2')
         output = 'fc7_stage_2'
     elif i == 2:
+        add_multilevel_pred_box_blob(model, blob_in, 'bbox_pred_stage_2')
         roi_feat_stage_3 = model.RoIFeatureTransform(
             blob_in,
             'roi_feat_stage_3',
