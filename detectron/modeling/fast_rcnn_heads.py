@@ -41,7 +41,7 @@ import detectron.utils.boxes as box_utils
 from caffe2.python import core, workspace
 import numpy as np
 import detectron.modeling.FPN as fpn
-import detectron.roi_data.loader.RoIDataLoader as loader
+from detectron.roi_data.loader import RoIDataLoader as loader
 
 # ---------------------------------------------------------------------------- #
 # Fast R-CNN outputs and losses
