@@ -189,7 +189,7 @@ def add_cascade_rcnn_losses(model, thresh, i):
         model.AddMetrics('accuracy_cls_stage_1')
     elif i == 1:
         cls_prob_stage_2, loss_cls_stage_2 = model.net.SoftmaxWithLoss(
-            ['cls_score_stage_2', 'labels_int32'], ['cls_prob_stage_2', 'loss_cls_stage_2'],
+            ['cls_score_stage_2', 'labels_stage_2'], ['cls_prob_stage_2', 'loss_cls_stage_2'],
             scale=model.GetLossScale()
         )
         loss_bbox_stage_2 = model.net.SmoothL1Loss(
@@ -207,7 +207,7 @@ def add_cascade_rcnn_losses(model, thresh, i):
     elif i == 2:
         get_labels(model, i)
         cls_prob_stage_3, loss_cls_stage_3 = model.net.SoftmaxWithLoss(
-            ['cls_score_stage_3', 'labels_int32'], ['cls_prob_stage_3', 'loss_cls_stage_3'],
+            ['cls_score_stage_3', 'labels_stage_3'], ['cls_prob_stage_3', 'loss_cls_stage_3'],
             scale=model.GetLossScale()
         )
         loss_bbox_stage_3 = model.net.SmoothL1Loss(
