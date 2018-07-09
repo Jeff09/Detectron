@@ -226,9 +226,8 @@ def add_cascade_rcnn_losses(model, thresh, i):
 
     return loss_gradients
 
-def get_labels(i):
-    
-    label_boxes = workspace.FetchBlob(core.ScopedName"labels_int32"))
+def get_labels(i):    
+    label_boxes = workspace.FetchBlob(core.ScopedName("labels_int32"))
     gt_boxes = workspace.FetchBlob("bbox_targets") 
     pred_boxes_stage_1 = workspace.FetchBlob('bbox_pred_stage_'+str(i))
     num_inside = pred_boxes_stage_1.shape[0]
