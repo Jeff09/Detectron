@@ -41,7 +41,6 @@ import detectron.utils.boxes as box_utils
 from caffe2.python import core, workspace
 import numpy as np
 import detectron.modeling.FPN as fpn
-from detectron.roi_data.loader import RoIDataLoader as loader
 
 # ---------------------------------------------------------------------------- #
 # Fast R-CNN outputs and losses
@@ -258,7 +257,7 @@ def add_multilevel_pred_box_blob(model, blob_in, pred_boxes_name):
     '''
     lvl_min = cfg.FPN.RPN_MIN_LEVEL
     lvl_max = cfg.FPN.RPN_MAX_LEVEL
-    print(loader.get_output_names())
+    print(model.roi_data_loader.get_output_names())
     pred_boxes = workspace.FetchBlob(core.ScopedName(pred_boxes_name))
     lvs = fpn.map_rois_to_fpn_levels(pred_boxes, lvl_min, lvl_max)
     fpn.add_multilevel_roi_blobs(blob_in, pred_boxes_name, pred_boxes, lvs, lvl_min, lvl_max)
