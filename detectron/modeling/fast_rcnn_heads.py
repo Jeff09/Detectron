@@ -176,6 +176,7 @@ def add_cascade_rcnn_losses(model, thresh, i):
     print("Current blobs in the workspace: {}".format(workspace.Blobs()))
     if not workspace.HasBlob(core.ScopedName('labels_int32')):
         print("donot have blob labels_int32")
+        print(model.net.Proto())
     get_labels(model, i) 
     #print(model.net.Proto())
     if i == 0:
