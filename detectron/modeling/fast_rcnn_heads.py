@@ -173,6 +173,8 @@ def add_cascade_rcnn_outputs(model, blob_in, dim, i):
 def add_cascade_rcnn_losses(model, thresh, i):
     assert i < 3   
     get_labels(model, i) 
+    print("Current blobs in the workspace: {}".format(workspace.Blobs()))
+    #print(model.net.Proto())
     if i == 0:
         cls_prob_stage_1, loss_cls_stage_1 = model.net.SoftmaxWithLoss(
             ['cls_score_stage_1', 'labels_stage_1'], ['cls_prob_stage_1', 'loss_cls_stage_1'],
@@ -259,7 +261,6 @@ def add_multilevel_pred_box_blob(model, blob_in, pred_boxes_name):
     '''
     lvl_min = cfg.FPN.RPN_MIN_LEVEL
     lvl_max = cfg.FPN.RPN_MAX_LEVEL
-    print(model.net.Proto())
     pred_boxes = workspace.FetchBlob(core.ScopedName(pred_boxes_name))
     lvs = fpn.map_rois_to_fpn_levels(pred_boxes, lvl_min, lvl_max)
     fpn.add_multilevel_roi_blobs(blob_in, pred_boxes_name, pred_boxes, lvs, lvl_min, lvl_max)
