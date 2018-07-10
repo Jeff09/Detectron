@@ -167,7 +167,7 @@ def add_cascade_rcnn_outputs(model, blob_in, dim, i):
             weight_init=gauss_fill(0.001),
             bias_init=const_fill(0.0)
         )
-    workspace.RunNetOnce(model.param_init_net)
+    #workspace.RunNetOnce(model.param_init_net)
     
 
 
@@ -237,6 +237,7 @@ def add_cascade_rcnn_losses(model, thresh, i):
 def get_labels(model, i):
     workspace.ResetWorkspace()
     workspace.RunNetOnce(model.param_init_net)
+    print(str(model.param_init_net.Proto()))
     label_boxes = workspace.FetchBlob(core.ScopedName("labels_int32"))
     gt_boxes = workspace.FetchBlob(core.ScopedName("bbox_targets"))
     pred_boxes = workspace.FetchBlob(core.ScopedName('bbox_pred_stage_'+str(i + 1)))
