@@ -237,9 +237,9 @@ def add_cascade_rcnn_losses(model, thresh, i):
 def get_labels(model, i):
     workspace.ResetWorkspace()
     workspace.RunNetOnce(model.param_init_net)
-    pred_boxes = workspace.FetchBlob(core.ScopedName('bbox_pred_stage_'+str(i + 1)))
-    gt_boxes = workspace.FetchBlob(core.ScopedName("bbox_targets"))
     label_boxes = workspace.FetchBlob(core.ScopedName("labels_int32"))
+    gt_boxes = workspace.FetchBlob(core.ScopedName("bbox_targets"))
+    pred_boxes = workspace.FetchBlob(core.ScopedName('bbox_pred_stage_'+str(i + 1)))
     num_inside = pred_boxes.shape[0]
 
     labels = np.empty((num_inside, ), dtype=np.int32)
