@@ -173,10 +173,10 @@ def add_cascade_rcnn_outputs(model, blob_in, dim, i):
 
 def add_cascade_rcnn_losses(model, thresh, i):
     assert i < 3   
-    print("Current blobs in the workspace: {}".format(workspace.Blobs()))
-    if not workspace.HasBlob(core.ScopedName('labels_int32')):
-        print("donot have blob labels_int32")
-        print(model.net.Proto())
+    #print("Current blobs in the workspace: {}".format(workspace.Blobs()))
+    #if not workspace.HasBlob(core.ScopedName('labels_int32')):
+    #    print("donot have blob labels_int32")
+    #    print(model.net.Proto())
     get_labels(model, i) 
     #print(model.net.Proto())
     if i == 0:
@@ -235,6 +235,7 @@ def add_cascade_rcnn_losses(model, thresh, i):
     return loss_gradients
 
 def get_labels(model, i):
+    workspace.ResetWorkspace()
     workspace.RunNetOnce(model.param_init_net)
     pred_boxes = workspace.FetchBlob(core.ScopedName('bbox_pred_stage_'+str(i + 1)))
     gt_boxes = workspace.FetchBlob(core.ScopedName("bbox_targets"))
