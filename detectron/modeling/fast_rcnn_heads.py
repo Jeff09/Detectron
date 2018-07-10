@@ -235,7 +235,7 @@ def add_cascade_rcnn_losses(model, thresh, i):
     return loss_gradients
 
 def get_labels(model, i):
-    workspace.RunNet(model.net.Proto().name)
+    workspace.RunNetOnce(model.param_init_net)
     label_boxes = workspace.FetchBlob(core.ScopedName("labels_int32"))
     gt_boxes = workspace.FetchBlob(core.ScopedName("bbox_targets"))
     pred_boxes = workspace.FetchBlob(core.ScopedName('bbox_pred_stage_'+str(i + 1)))
