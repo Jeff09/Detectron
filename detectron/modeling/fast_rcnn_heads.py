@@ -41,6 +41,7 @@ import detectron.utils.boxes as box_utils
 from caffe2.python import core, workspace
 import numpy as np
 import detectron.modeling.FPN as fpn
+import os
 
 # ---------------------------------------------------------------------------- #
 # Fast R-CNN outputs and losses
@@ -237,7 +238,11 @@ def add_cascade_rcnn_losses(model, thresh, i):
 def get_labels(model, i):
     workspace.ResetWorkspace()
     workspace.RunNetOnce(model.param_init_net)
-    print(str(model.param_init_net.Proto()))
+    #print(str(model.param_init_net.Proto()))
+    with open(os.path.join(os.getcwd, "train_net.pbtxt"), 'w') as fid:
+        fid.write(str(model.net.Proto()))
+    with open(os.path.join(os.getcwd, "train_init_net.pbtxt"), 'w') as fid:
+        fid.write(str(model.param_init_net.Proto()))
     label_boxes = workspace.FetchBlob(core.ScopedName("labels_int32"))
     gt_boxes = workspace.FetchBlob(core.ScopedName("bbox_targets"))
     pred_boxes = workspace.FetchBlob(core.ScopedName('bbox_pred_stage_'+str(i + 1)))
