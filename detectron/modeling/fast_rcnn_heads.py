@@ -173,8 +173,8 @@ def add_cascade_rcnn_outputs(model, blob_in, dim, i):
 
 def add_cascade_rcnn_losses(model, thresh, i):
     assert i < 3   
-    get_labels(model, i) 
     print("Current blobs in the workspace: {}".format(workspace.Blobs()))
+    get_labels(model, i) 
     #print(model.net.Proto())
     if i == 0:
         cls_prob_stage_1, loss_cls_stage_1 = model.net.SoftmaxWithLoss(
