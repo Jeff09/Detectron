@@ -245,7 +245,8 @@ def get_labels(model, i):
         # Fg label: above threshold IOU
         labels = np.array([label_boxes[i] for i in anchor_to_gt_argmax], dtype=np.int32)
     workspace.FeedBlob(core.ScopedName("labels_stage_"+str(i+1)), labels)
-    workspace.RunNet(model.net.Proto().name)
+    #workspace.RunNet(model.net.Proto().name)
+    workspace.RunNetOnce(model.param_init_net)
 
 
 def add_multilevel_pred_box_blob(model, blob_in, pred_boxes_name):
