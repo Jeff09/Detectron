@@ -116,7 +116,7 @@ def add_cascade_rcnn_outputs(model, blob_in, dim, i):
             # with the label cross entropy loss for numerical stability
             model.Softmax('cls_score_stage_1', 'cls_prob', engine='CUDNN')
         # Box regression layer
-        model.FC(
+        bbox_pred_stage_1 = model.FC(
             blob_in,
             'bbox_pred_stage_1',
             dim,
@@ -137,7 +137,7 @@ def add_cascade_rcnn_outputs(model, blob_in, dim, i):
             # Only add softmax when testing; during training the softmax is combined
             # with the label cross entropy loss for numerical stability
             model.Softmax('cls_score_stage_2', 'cls_prob_stage_2', engine='CUDNN')
-        model.FC(
+        bbox_pred_stage_2 = model.FC(
             blob_in,
             'bbox_pred_stage_2',
             dim,
@@ -257,7 +257,7 @@ def add_multilevel_pred_box_blob(model, blob_in, pred_boxes_name):
     '''
     lvl_min = cfg.FPN.RPN_MIN_LEVEL
     lvl_max = cfg.FPN.RPN_MAX_LEVEL
-    print(model.roi_data_loader.get_output_names())
+    print(model.net.Proto())
     pred_boxes = workspace.FetchBlob(core.ScopedName(pred_boxes_name))
     lvs = fpn.map_rois_to_fpn_levels(pred_boxes, lvl_min, lvl_max)
     fpn.add_multilevel_roi_blobs(blob_in, pred_boxes_name, pred_boxes, lvs, lvl_min, lvl_max)
