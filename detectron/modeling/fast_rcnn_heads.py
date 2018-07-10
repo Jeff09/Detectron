@@ -239,9 +239,9 @@ def get_labels(model, i):
     workspace.ResetWorkspace()
     workspace.RunNetOnce(model.param_init_net)
     #print(str(model.param_init_net.Proto()))
-    with open(os.path.join(os.getcwd, "train_net.pbtxt"), 'w') as fid:
+    with open(os.path.join(os.getcwd(), "train_net.pbtxt"), 'w') as fid:
         fid.write(str(model.net.Proto()))
-    with open(os.path.join(os.getcwd, "train_init_net.pbtxt"), 'w') as fid:
+    with open(os.path.join(os.getcwd(), "train_init_net.pbtxt"), 'w') as fid:
         fid.write(str(model.param_init_net.Proto()))
     label_boxes = workspace.FetchBlob(core.ScopedName("labels_int32"))
     gt_boxes = workspace.FetchBlob(core.ScopedName("bbox_targets"))
