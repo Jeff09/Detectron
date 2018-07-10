@@ -167,6 +167,7 @@ def add_cascade_rcnn_outputs(model, blob_in, dim, i):
             weight_init=gauss_fill(0.001),
             bias_init=const_fill(0.0)
         )
+    workspace.RunNetOnce(model.param_init_net)
     
 
 
