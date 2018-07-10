@@ -98,6 +98,7 @@ def add_fast_rcnn_losses(model):
 
 def add_cascade_rcnn_outputs(model, blob_in, dim, i):
     # Box classification layer
+    # blob_in: fc7
     assert i < 3    
     num_bbox_reg_classes = (
         2 if cfg.MODEL.CLS_AGNOSTIC_BBOX_REG else model.num_classes
@@ -116,7 +117,7 @@ def add_cascade_rcnn_outputs(model, blob_in, dim, i):
             # with the label cross entropy loss for numerical stability
             model.Softmax('cls_score_stage_1', 'cls_prob', engine='CUDNN')
         # Box regression layer
-        bbox_pred_stage_1 = model.FC(
+        model.FC(
             blob_in,
             'bbox_pred_stage_1',
             dim,
@@ -137,7 +138,7 @@ def add_cascade_rcnn_outputs(model, blob_in, dim, i):
             # Only add softmax when testing; during training the softmax is combined
             # with the label cross entropy loss for numerical stability
             model.Softmax('cls_score_stage_2', 'cls_prob_stage_2', engine='CUDNN')
-        bbox_pred_stage_2 = model.FC(
+        model.FC(
             blob_in,
             'bbox_pred_stage_2',
             dim,
@@ -171,9 +172,10 @@ def add_cascade_rcnn_outputs(model, blob_in, dim, i):
 
 def add_cascade_rcnn_losses(model, thresh, i):
     assert i < 3   
+    get_labels(model, i) 
     if i == 0:
         cls_prob_stage_1, loss_cls_stage_1 = model.net.SoftmaxWithLoss(
-            ['cls_score_stage_1', 'labels_int32'], ['cls_prob_stage_1', 'loss_cls_stage_1'],
+            ['cls_score_stage_1', 'labels_stage_1'], ['cls_prob_stage_1', 'loss_cls_stage_1'],
             scale=model.GetLossScale()
         )
         loss_bbox_stage_1 = model.net.SmoothL1Loss(
@@ -185,11 +187,10 @@ def add_cascade_rcnn_losses(model, thresh, i):
             scale=model.GetLossScale()
         )
         loss_gradients = blob_utils.get_loss_gradients(model, [loss_cls_stage_1, loss_bbox_stage_1])
-        model.Accuracy(['cls_prob_stage_1', 'labels_int32'], 'accuracy_cls_stage_1')
+        model.Accuracy(['cls_prob_stage_1', 'labels_stage_1'], 'accuracy_cls_stage_1')
         model.AddLosses(['loss_cls_stage_1', 'loss_bbox_stage_1'])
         model.AddMetrics('accuracy_cls_stage_1')
-    elif i == 1:
-        get_labels(model, i)      
+    elif i == 1:             
         cls_prob_stage_2, loss_cls_stage_2 = model.net.SoftmaxWithLoss(
             ['cls_score_stage_2', 'labels_stage_2'], ['cls_prob_stage_2', 'loss_cls_stage_2'],
             scale=model.GetLossScale()
@@ -207,7 +208,7 @@ def add_cascade_rcnn_losses(model, thresh, i):
         model.AddLosses(['loss_cls_stage_2', 'loss_bbox_stage_2'])
         model.AddMetrics('accuracy_cls_stage_2')
     elif i == 2:
-        get_labels(model, i)
+        #get_labels(model, i)
         cls_prob_stage_3, loss_cls_stage_3 = model.net.SoftmaxWithLoss(
             ['cls_score_stage_3', 'labels_stage_3'], ['cls_prob_stage_3', 'loss_cls_stage_3'],
             scale=model.GetLossScale()
@@ -230,7 +231,7 @@ def add_cascade_rcnn_losses(model, thresh, i):
 def get_labels(model, i):
     label_boxes = workspace.FetchBlob(core.ScopedName("labels_int32"))
     gt_boxes = workspace.FetchBlob(core.ScopedName("bbox_targets"))
-    pred_boxes = workspace.FetchBlob(core.ScopedName('bbox_pred_stage_'+str(i)))
+    pred_boxes = workspace.FetchBlob(core.ScopedName('bbox_pred_stage_'+str(i + 1)))
     num_inside = pred_boxes.shape[0]
     labels = np.empty((num_inside, ), dtype=np.int32)
     labels.fill(0)
