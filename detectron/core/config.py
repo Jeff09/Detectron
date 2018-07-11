@@ -134,6 +134,9 @@ __C.TRAIN.PROPOSAL_FILES = ()
 # faster)
 __C.TRAIN.ASPECT_GROUPING = True
 
+# Cascade RCNN 
+__C.TRAIN.CASCADE_RCNN = False
+
 # Cascade IoU thresholds
 __C.TRAIN.CASCADE_THRESHOLDS = 0.5, 0.6, 0.7
 
