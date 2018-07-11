@@ -198,14 +198,17 @@ def build_generic_detection_model(
 
         if not cfg.MODEL.RPN_ONLY:
             # Add the Fast R-CNN head
-            #head_loss_gradients['box'] = _add_fast_rcnn_head(
-            #    model, add_roi_box_head_func, blob_conv, dim_conv,
-            #    spatial_scale_conv
-            #)
-            head_loss_gradients['box'] = _add_cascade_rcnn_head(
+            if cfg.TRAIN.CASCADE_RCNN:
+                head_loss_gradients['box'] = _add_cascade_rcnn_head(
                 model, blob_conv, dim_conv,
                 spatial_scale_conv
             )
+            else:
+                head_loss_gradients['box'] = _add_fast_rcnn_head(
+                    model, add_roi_box_head_func, blob_conv, dim_conv,
+                    spatial_scale_conv
+                )
+            
 
         if cfg.MODEL.MASK_ON:
             # Add the mask head
@@ -267,10 +270,10 @@ def _add_fast_rcnn_head(
 def _add_cascade_rcnn_head(
     model, blob_in, dim_in, spatial_scale_in
 ):
+    assert cfg.TRAIN.CASCADE_RCNN is True
     """Add a Cascade R-CNN head to the model"""
     # Fast R-CNN head to the model
     thresholds = cfg.TRAIN.CASCADE_THRESHOLDS
-    #thresholds = thresholds.split(",")
     assert len(thresholds) == 3
     loss_gradients = {}
     for i in range(len(thresholds)):
