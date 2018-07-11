@@ -32,7 +32,8 @@ FAST_RCNN:
 TRAIN:
   WEIGHTS: ./weights/X-152-32x8d-IN5k.pkl #https://s3-us-west-2.amazonaws.com/detectron/ImageNetPretrained/25093814/X-152-32x8d-IN5k.pkl
   DATASETS: ('coco_2014_train', )
-  SCALES: (576, 800,)  # Scale jitter
+  SCALES: (576, 832,)  # Scale jitter
+  CASCADE_RCNN: True
   CASCADE_THRESHOLDS: 0.5, 0.6, 0.7
   MAX_SIZE: 1664
   IMS_PER_BATCH: 1
