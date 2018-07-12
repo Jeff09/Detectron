@@ -77,7 +77,7 @@ def add_fast_rcnn_outputs(model, blob_in, dim):
 
 
 def add_fast_rcnn_losses(model):
-    """Add losses for RoI classification and bounding box regression."""
+    """Add losses for RoI classification and bounding box regression. Only take post_nms_topN rois to calculate the loss."""
     cls_prob, loss_cls = model.net.SoftmaxWithLoss(
         ['cls_score', 'labels_int32'], ['cls_prob', 'loss_cls'],
         scale=model.GetLossScale()
@@ -178,11 +178,12 @@ def add_cascade_rcnn_losses(model, thresh, i):
     #if not workspace.HasBlob(core.ScopedName('labels_int32')):
     #    print("donot have blob labels_int32")
     #    print(model.net.Proto())
-    get_labels(model, i) 
+    #get_labels(model, i) 
     #print(model.net.Proto())
     if i == 0:
+        #get_labels(model, i, ["labels_int32", "bbox_target", 'bbox_pred_stage_'+str(i + 1)]) 
         cls_prob_stage_1, loss_cls_stage_1 = model.net.SoftmaxWithLoss(
-            ['cls_score_stage_1', 'labels_stage_1'], ['cls_prob_stage_1', 'loss_cls_stage_1'],
+            ['cls_score_stage_1', 'labels_int32'], ['cls_prob_stage_1', 'loss_cls_stage_1'],
             scale=model.GetLossScale()
         )
         loss_bbox_stage_1 = model.net.SmoothL1Loss(
@@ -240,12 +241,19 @@ def get_labels(model, i):
     workspace.ResetWorkspace()
     workspace.RunNetOnce(model.param_init_net)
     #print(str(model.param_init_net.Proto()))
-    with open(os.path.join(os.getcwd(), "train_net.pbtxt"), 'w') as fid:
-        fid.write(str(model.net.Proto()))
-    with open(os.path.join(os.getcwd(), "train_init_net.pbtxt"), 'w') as fid:
-        fid.write(str(model.param_init_net.Proto()))
-    label_boxes = workspace.FetchBlob(core.ScopedName("labels_int32"))
-    gt_boxes = workspace.FetchBlob(core.ScopedName("bbox_targets"))
+    #with open(os.path.join(os.getcwd(), "train_net.pbtxt"), 'w') as fid:
+    #    fid.write(str(model.net.Proto()))
+    #with open(os.path.join(os.getcwd(), "train_init_net.pbtxt"), 'w') as fid:
+    #    fid.write(str(model.param_init_net.Proto()))
+    roidb = workspace.FetchBlob(core.ScopedName("roidb"))
+    for entry in roidb:
+        print("roidb: ", entry.keys())
+        return
+    
+
+
+    #label_boxes = workspace.FetchBlob(core.ScopedName("labels_int32"))
+    #gt_boxes = workspace.FetchBlob(core.ScopedName("bbox_targets"))
     pred_boxes = workspace.FetchBlob(core.ScopedName('bbox_pred_stage_'+str(i + 1)))
     num_inside = pred_boxes.shape[0]
 
@@ -342,7 +350,7 @@ def add_cascade_rcnn_head(model, blob_in, dim_in, spatial_scale, i):
         roi_feat_stage_1 = model.RoIFeatureTransform(
             blob_in,
             'roi_feat_stage_1',
-            blob_rois='rois',
+            blob_rois='rois', # post_nms_topN 
             method=cfg.FAST_RCNN.ROI_XFORM_METHOD,
             resolution=roi_size,
             sampling_ratio=cfg.FAST_RCNN.ROI_XFORM_SAMPLING_RATIO,
