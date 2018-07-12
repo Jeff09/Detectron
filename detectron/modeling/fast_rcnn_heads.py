@@ -78,10 +78,7 @@ def add_fast_rcnn_outputs(model, blob_in, dim):
 
 def add_fast_rcnn_losses(model):
     """Add losses for RoI classification and bounding box regression. Only take post_nms_topN rois to calculate the loss."""
-    bbox_pred = workspace.FetchBlob(core.ScopedName("bbox_pred"))
-    roidb = workspace.FetchBlob(core.ScopedName("roidb"))
-    for entry in roidb:
-        print("roidb: ", entry.keys())
+    
     cls_prob, loss_cls = model.net.SoftmaxWithLoss(
         ['cls_score', 'labels_int32'], ['cls_prob', 'loss_cls'],
         scale=model.GetLossScale()
@@ -285,6 +282,7 @@ def add_multilevel_pred_box_blob(model, blob_in, pred_boxes_name):
         blob_in: a dict mapping from blob name to numpy ndarray
         pred_boxes_name: 'bbox_pred_stage_1' or bbox_pred_stage_2'
     '''
+    workspace.RunNetOnce(model.param_init_net)
     lvl_min = cfg.FPN.RPN_MIN_LEVEL
     lvl_max = cfg.FPN.RPN_MAX_LEVEL
     
