@@ -78,6 +78,10 @@ def add_fast_rcnn_outputs(model, blob_in, dim):
 
 def add_fast_rcnn_losses(model):
     """Add losses for RoI classification and bounding box regression. Only take post_nms_topN rois to calculate the loss."""
+    bbox_pred = workspace.FetchBlob(core.ScopedName("bbox_pred"))
+    roidb = workspace.FetchBlob(core.ScopedName("roidb"))
+    for entry in roidb:
+        print("roidb: ", entry.keys())
     cls_prob, loss_cls = model.net.SoftmaxWithLoss(
         ['cls_score', 'labels_int32'], ['cls_prob', 'loss_cls'],
         scale=model.GetLossScale()
@@ -283,9 +287,8 @@ def add_multilevel_pred_box_blob(model, blob_in, pred_boxes_name):
     '''
     lvl_min = cfg.FPN.RPN_MIN_LEVEL
     lvl_max = cfg.FPN.RPN_MAX_LEVEL
-    roidb = workspace.FetchBlob(core.ScopedName("roidb"))
-    for entry in roidb:
-        print("roidb: ", entry.keys())
+    
+    pred_boxes_name = core.BlobReference(pred_boxes_name)
     pred_boxes = workspace.FetchBlob(core.ScopedName(pred_boxes_name))
     lvs = fpn.map_rois_to_fpn_levels(pred_boxes, lvl_min, lvl_max)
     fpn.add_multilevel_roi_blobs(blob_in, pred_boxes_name, pred_boxes, lvs, lvl_min, lvl_max)
@@ -407,7 +410,7 @@ def add_roi_2mlp_head(model, blob_in, dim_in, spatial_scale):
     roi_feat = model.RoIFeatureTransform(
         blob_in,
         'roi_feat',
-        blob_rois='rois',
+        blob_rois='rois', # post_nms_topN
         method=cfg.FAST_RCNN.ROI_XFORM_METHOD,
         resolution=roi_size,
         sampling_ratio=cfg.FAST_RCNN.ROI_XFORM_SAMPLING_RATIO,
