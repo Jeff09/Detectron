@@ -283,6 +283,9 @@ def add_multilevel_pred_box_blob(model, blob_in, pred_boxes_name):
     '''
     lvl_min = cfg.FPN.RPN_MIN_LEVEL
     lvl_max = cfg.FPN.RPN_MAX_LEVEL
+    roidb = workspace.FetchBlob(core.ScopedName("roidb"))
+    for entry in roidb:
+        print("roidb: ", entry.keys())
     pred_boxes = workspace.FetchBlob(core.ScopedName(pred_boxes_name))
     lvs = fpn.map_rois_to_fpn_levels(pred_boxes, lvl_min, lvl_max)
     fpn.add_multilevel_roi_blobs(blob_in, pred_boxes_name, pred_boxes, lvs, lvl_min, lvl_max)
@@ -363,8 +366,7 @@ def add_cascade_rcnn_head(model, blob_in, dim_in, spatial_scale, i):
         output = 'fc7_stage_1'
     elif i == 1:
         # map bbox_pred_stage_1 to fpn conv feature map
-        bbox_pred_stage_1 = core.ScopedBlobReference('bbox_pred_stage_1')
-        add_multilevel_pred_box_blob(model, blob_in, bbox_pred_stage_1)
+        add_multilevel_pred_box_blob(model, blob_in, "bbox_pred_stage_1")
         roi_feat_stage_2 = model.RoIFeatureTransform(
             blob_in,
             'roi_feat_stage_2',
