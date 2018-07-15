@@ -199,7 +199,7 @@ def build_generic_detection_model(
         if not cfg.MODEL.RPN_ONLY:
             # Add the Fast R-CNN head
             if cfg.TRAIN.CASCADE_RCNN:
-                head_loss_gradients['box'] = _add_cascade_rcnn_head(
+                head_loss_gradients = _add_cascade_rcnn_head(
                 model, blob_conv, dim_conv,
                 spatial_scale_conv
             )
@@ -280,7 +280,8 @@ def _add_cascade_rcnn_head(
         blob_frcn, dim_frcn = fast_rcnn_heads.add_cascade_rcnn_head(model, blob_in, dim_in, spatial_scale_in, i)
         fast_rcnn_heads.add_cascade_rcnn_outputs(model, blob_frcn, dim_frcn, i)
         if model.train:
-            loss_gradients.update(fast_rcnn_heads.add_cascade_rcnn_losses(model, int(thresholds[i]), i))
+            loss = fast_rcnn_heads.add_cascade_rcnn_losses(model, int(thresholds[i]), i)
+            loss_gradients['box_stage_' + str(i)] = loss 
     if model.train:
         return loss_gradients
     else:
