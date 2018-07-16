@@ -33,8 +33,11 @@ from detectron.core.config import cfg
 from detectron.ops.collect_and_distribute_fpn_rpn_proposals \
     import CollectAndDistributeFpnRpnProposalsOp
 from detectron.ops.generate_proposal_labels import GenerateProposalLabelsOp
+from detectron.ops.generate_proposal_labels_stage_2 import GenerateProposalLabels_stage_2_Op
+from detectron.ops.generate_proposal_labels_stage_3 import GenerateProposalLabels_stage_3_Op
 from detectron.ops.generate_proposals import GenerateProposalsOp
 import detectron.roi_data.fast_rcnn as fast_rcnn_roi_data
+import detectron.roi_data.cascade_rcnn as cascade_rcnn_roi_data
 import detectron.utils.c2 as c2_utils
 
 logger = logging.getLogger(__name__)
@@ -167,6 +170,54 @@ class DetectionModelHelper(cnn.CNNModelHelper):
         self.net.Python(GenerateProposalLabelsOp().forward)(
             blobs_in, blobs_out, name=name
         )
+        return blobs_out
+    
+    def GenerateProposalLabels_cascade_rcnn(self, blobs_in, i):
+        """Op for generating training labels for RPN proposals. This is used
+        when training RPN jointly with Fast/Mask R-CNN (as in end-to-end
+        Faster R-CNN training).
+
+        blobs_in:
+          - 'rpn_rois': 2D tensor of RPN proposals output by GenerateProposals
+          - 'roidb': roidb entries that will be labeled
+          - 'im_info': See GenerateProposals doc.
+
+        blobs_out:
+          - (variable set of blobs): returns whatever blobs are required for
+            training the model. It does this by querying the data loader for
+            the list of blobs that are needed.
+        """
+        name = 'GenerateProposalLabels_cascade_rcnnOp:' + ','.join(
+            [str(b) for b in blobs_in]
+        )
+
+        # The list of blobs is not known before run-time because it depends on
+        # the specific model being trained. Query the data loader to get the
+        # list of output blob names.
+        if i == 1:
+            blobs_out = cascade_rcnn_roi_data.get_cascade_rcnn_stage_2_blob_names(
+                is_training=self.train
+            )
+        elif i == 2:
+            blobs_out = cascade_rcnn_roi_data.get_cascade_rcnn_stage_3_blob_names(
+                is_training=self.train
+            )
+        else:
+            raise ValueError('there is no stage ', i, ' get_cascade_rcnn_stage_', i, ' blob_name in fast_rcnn_roi_data')
+
+        blobs_out = [core.ScopedBlobReference(b) for b in blobs_out]
+
+        if i == 1:
+            self.net.Python(GenerateProposalLabels_stage_2_Op().forward)(
+                blobs_in, blobs_out, name=name
+            )
+        elif i == 2:
+            self.net.Python(GenerateProposalLabels_stage_3_Op().forward)(
+                blobs_in, blobs_out, name=name
+            )
+        else:
+            raise ValueError('there is no stage GenerateProposalLabels_stage_', i)
+
         return blobs_out
 
     def CollectAndDistributeFpnRpnProposals(self):
