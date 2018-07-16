@@ -263,7 +263,7 @@ def add_cascade_rcnn_head(model, blob_in, dim_in, spatial_scale, i):
     elif i == 1:
         # genearte proposals for stage 2 from predicted bbox of stage 1
         model.GenerateProposals_cascade_rcnn(
-            ['cls_score_stage_1', 'bbox_pred_stage_1', 'im_fo'],
+            ['cls_score_stage_1', 'bbox_pred_stage_1', 'im_info'],
             ['rois_stage_2', 'rois_stage_2_probs']
         )
         if model.train:
@@ -289,7 +289,7 @@ def add_cascade_rcnn_head(model, blob_in, dim_in, spatial_scale, i):
     elif i == 2:
         # genearte proposals for stage 3 from predicted bbox of stage 2
         model.GenerateProposals_cascade_rcnn(
-            ['cls_score_stage_2', 'bbox_pred_stage_2', 'im_fo'],
+            ['cls_score_stage_2', 'bbox_pred_stage_2', 'im_info'],
             ['rois_stage_3', 'rois_stage_3_probs']
         )
         if model.train:
