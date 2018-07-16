@@ -182,33 +182,32 @@ def add_cascade_rcnn_losses(model, thresh, i):
     #get_labels(model, i) 
     #print(model.net.Proto())
     if i == 0:
-        #get_labels(model, i, ["labels_int32", "bbox_target", 'bbox_pred_stage_'+str(i + 1)]) 
         cls_prob_stage_1, loss_cls_stage_1 = model.net.SoftmaxWithLoss(
             ['cls_score_stage_1', 'labels_int32'], ['cls_prob_stage_1', 'loss_cls_stage_1'],
             scale=model.GetLossScale()
         )
         loss_bbox_stage_1 = model.net.SmoothL1Loss(
             [
-                'bbox_pred_stage_1', 'bbox_targets', 'bbox_inside_weights',
-                'bbox_outside_weights'
+                'bbox_pred_stage_1', 'bbox_targets', 'bbox_inside_weights_stage_1',
+                'bbox_outside_weights_stage_1'
             ],
             'loss_bbox_stage_1',
             scale=model.GetLossScale()
         )
         loss_gradients = blob_utils.get_loss_gradients(model, [loss_cls_stage_1, loss_bbox_stage_1])
-        model.Accuracy(['cls_prob_stage_1', 'labels_stage_1'], 'accuracy_cls_stage_1')
+        model.Accuracy(['cls_prob_stage_1', 'labels_int32'], 'accuracy_cls_stage_1')
         model.AddLosses(['loss_cls_stage_1', 'loss_bbox_stage_1'])
         model.AddMetrics('accuracy_cls_stage_1')
     elif i == 1:             
-        get_labels(model, i) 
+        #_sample_labels(model, i) 
         cls_prob_stage_2, loss_cls_stage_2 = model.net.SoftmaxWithLoss(
             ['cls_score_stage_2', 'labels_stage_2'], ['cls_prob_stage_2', 'loss_cls_stage_2'],
             scale=model.GetLossScale()
         )
         loss_bbox_stage_2 = model.net.SmoothL1Loss(
             [
-                'bbox_pred_stage_2', 'bbox_targets', 'bbox_inside_weights',
-                'bbox_outside_weights'
+                'bbox_pred_stage_2', 'bbox_targets_stage_2', 'bbox_inside_weights_stage_2',
+                'bbox_outside_weights_stage_2'
             ],
             'loss_bbox_stage_2',
             scale=model.GetLossScale()
@@ -218,15 +217,15 @@ def add_cascade_rcnn_losses(model, thresh, i):
         model.AddLosses(['loss_cls_stage_2', 'loss_bbox_stage_2'])
         model.AddMetrics('accuracy_cls_stage_2')
     elif i == 2:
-        get_labels(model, i)
+        #_sample_labels(model, i)
         cls_prob_stage_3, loss_cls_stage_3 = model.net.SoftmaxWithLoss(
             ['cls_score_stage_3', 'labels_stage_3'], ['cls_prob_stage_3', 'loss_cls_stage_3'],
             scale=model.GetLossScale()
         )
         loss_bbox_stage_3 = model.net.SmoothL1Loss(
             [
-                'bbox_pred_stage_3', 'bbox_targets', 'bbox_inside_weights',
-                'bbox_outside_weights'
+                'bbox_pred_stage_3', 'bbox_targets_stage_3', 'bbox_inside_weights_stage_3',
+                'bbox_outside_weights_stage_3'
             ],
             'loss_bbox_stage_3',
             scale=model.GetLossScale()
@@ -237,60 +236,6 @@ def add_cascade_rcnn_losses(model, thresh, i):
         model.AddMetrics('accuracy_cls_stage_3')        
 
     return loss_gradients
-
-def get_labels(model, i):
-    workspace.ResetWorkspace()
-    workspace.RunNetOnce(model.param_init_net)
-    #print(str(model.param_init_net.Proto()))
-    #with open(os.path.join(os.getcwd(), "train_net.pbtxt"), 'w') as fid:
-    #    fid.write(str(model.net.Proto()))
-    #with open(os.path.join(os.getcwd(), "train_init_net.pbtxt"), 'w') as fid:
-    #    fid.write(str(model.param_init_net.Proto()))
-    roidb = workspace.FetchBlob(core.ScopedName("roidb"))
-    for entry in roidb:
-        print("roidb: ", entry.keys())
-        return
-    
-
-
-    #label_boxes = workspace.FetchBlob(core.ScopedName("labels_int32"))
-    #gt_boxes = workspace.FetchBlob(core.ScopedName("bbox_targets"))
-    pred_boxes = workspace.FetchBlob(core.ScopedName('bbox_pred_stage_'+str(i + 1)))
-    num_inside = pred_boxes.shape[0]
-
-    labels = np.empty((num_inside, ), dtype=np.int32)
-    labels.fill(0)
-    if len(gt_boxes) > 0:
-        # Compute overlaps between the anchors and the gt boxes overlaps
-        anchor_by_gt_overlap = box_utils.bbox_overlaps(pred_boxes, gt_boxes)
-        # Map from anchor to gt box that has highest overlap
-        anchor_to_gt_argmax = anchor_by_gt_overlap.argmax(axis=1)
-        # For each anchor, amount of overlap with most overlapping gt box
-        anchor_to_gt_max = anchor_by_gt_overlap[np.arange(num_inside),
-                                                anchor_to_gt_argmax]
-        # Fg label: above threshold IOU
-        labels = np.array([label_boxes[i] for i in anchor_to_gt_argmax], dtype=np.int32)
-    workspace.FeedBlob(core.ScopedName("labels_stage_"+str(i+1)), labels)
-    #workspace.RunNet(model.net.Proto().name)
-    #workspace.RunNetOnce(model.param_init_net)
-
-
-def add_multilevel_pred_box_blob(model, blob_in, pred_boxes_name):
-    '''
-    Add pred box blobs for multiple FPN levels to the blobs dict.
-    parameters: 
-        blob_in: a dict mapping from blob name to numpy ndarray
-        pred_boxes_name: 'bbox_pred_stage_1' or bbox_pred_stage_2'
-    '''
-    workspace.RunNetOnce(model.param_init_net)
-    lvl_min = cfg.FPN.RPN_MIN_LEVEL
-    lvl_max = cfg.FPN.RPN_MAX_LEVEL
-    
-    pred_boxes_name = core.BlobReference(pred_boxes_name)
-    pred_boxes = workspace.FetchBlob(core.ScopedName(pred_boxes_name))
-    lvs = fpn.map_rois_to_fpn_levels(pred_boxes, lvl_min, lvl_max)
-    fpn.add_multilevel_roi_blobs(blob_in, pred_boxes_name, pred_boxes, lvs, lvl_min, lvl_max)
-
 
 
 # ---------------------------------------------------------------------------- #
@@ -318,12 +263,18 @@ def add_cascade_rcnn_head(model, blob_in, dim_in, spatial_scale, i):
         model.Relu('fc7_stage_1', 'fc7_stage_1')
         output = 'fc7_stage_1'
     elif i == 1:
-        # map bbox_pred_stage_1 to fpn conv feature map
-        add_multilevel_pred_box_blob(model, blob_in, "bbox_pred_stage_1")
+        # map bbox_pred_stage_1 to fpn conv f roi_size = cfg.FAST_RCNN.ROI_XFORM_RESOLUTION
+        #add_multilevel_pred_box_blob(model, blob_in, "bbox_pred_stage_1")
+        if model.train:
+            # Add op that generates training labels for in-network RPN proposals
+            model.GenerateProposalLabels_cascade_rcnn(['bbox_pred_stage_1', 'roidb', 'im_info'], i)
+        else:
+            # Alias rois to rpn_rois for inference
+            model.net.Alias('bbox_pred_stage_1', 'rois')
         roi_feat_stage_2 = model.RoIFeatureTransform(
             blob_in,
             'roi_feat_stage_2',
-            blob_rois='bbox_pred_stage_1',
+            blob_rois='bbox_pred_stage_1', # post_nms_topN 
             method=cfg.FAST_RCNN.ROI_XFORM_METHOD,
             resolution=roi_size,
             sampling_ratio=cfg.FAST_RCNN.ROI_XFORM_SAMPLING_RATIO,
@@ -335,7 +286,13 @@ def add_cascade_rcnn_head(model, blob_in, dim_in, spatial_scale, i):
         model.Relu('fc7_stage_2', 'fc7_stage_2')
         output = 'fc7_stage_2'
     elif i == 2:
-        add_multilevel_pred_box_blob(model, blob_in, 'bbox_pred_stage_2')
+        #add_multilevel_pred_box_blob(model, blob_in, 'bbox_pred_stage_2')
+        if model.train:
+            # Add op that generates training labels for in-network RPN proposals
+            model.GenerateProposalLabels_cascade_rcnn(['bbox_pred_stage_2', 'roidb', 'im_info'], i)
+        else:
+            # Alias rois to rpn_rois for inference
+            model.net.Alias('bbox_pred_stage_2', 'rois')
         roi_feat_stage_3 = model.RoIFeatureTransform(
             blob_in,
             'roi_feat_stage_3',
