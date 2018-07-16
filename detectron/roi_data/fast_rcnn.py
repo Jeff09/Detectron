@@ -136,6 +136,8 @@ def _sample_rois(roidb, im_scale, batch_idx):
     rois_per_image = int(cfg.TRAIN.BATCH_SIZE_PER_IM)
     fg_rois_per_image = int(np.round(cfg.TRAIN.FG_FRACTION * rois_per_image))
     max_overlaps = roidb['max_overlaps']
+    print("before _sample_rois, max_overlaps shape: ", max_overlaps.data.shape)
+    print("before _sample_rois, bboxes shape: ", roidb['boxes'].data.shape)
 
     # Select foreground RoIs as those with >= FG_THRESH overlap
     fg_inds = np.where(max_overlaps >= cfg.TRAIN.FG_THRESH)[0]
