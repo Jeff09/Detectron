@@ -329,7 +329,7 @@ def add_cascade_rcnn_head(model, blob_in, dim_in, spatial_scale, i):
         roi_feat_stage_3 = model.RoIFeatureTransform(
             blob_in,
             'roi_feat_stage_3',
-            blob_rois='bbox_pred_stage_2',
+            blob_rois='rois_stage_3',
             method=cfg.FAST_RCNN.ROI_XFORM_METHOD,
             resolution=roi_size,
             sampling_ratio=cfg.FAST_RCNN.ROI_XFORM_SAMPLING_RATIO,
@@ -375,7 +375,7 @@ def add_cascade_rcnn_head(model, blob_in, dim_in, spatial_scale, i):
         roi_feat_stage_2 = model.RoIFeatureTransform(
             blob_in,
             'roi_feat_stage_2',
-            blob_rois='bbox_pred_stage_1', # post_nms_topN 
+            blob_rois='rois_stage_2', # post_nms_topN 
             method=cfg.FAST_RCNN.ROI_XFORM_METHOD,
             resolution=roi_size,
             sampling_ratio=cfg.FAST_RCNN.ROI_XFORM_SAMPLING_RATIO,
