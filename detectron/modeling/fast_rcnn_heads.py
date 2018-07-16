@@ -182,21 +182,20 @@ def add_cascade_rcnn_losses(model, thresh, i):
     #get_labels(model, i) 
     #print(model.net.Proto())
     if i == 0:
-        #get_labels(model, i, ["labels_int32", "bbox_target", 'bbox_pred_stage_'+str(i + 1)]) 
         cls_prob_stage_1, loss_cls_stage_1 = model.net.SoftmaxWithLoss(
             ['cls_score_stage_1', 'labels_int32'], ['cls_prob_stage_1', 'loss_cls_stage_1'],
             scale=model.GetLossScale()
         )
         loss_bbox_stage_1 = model.net.SmoothL1Loss(
             [
-                'bbox_pred_stage_1', 'bbox_targets', 'bbox_inside_weights',
-                'bbox_outside_weights'
+                'bbox_pred_stage_1', 'bbox_targets', 'bbox_inside_weights_stage_1',
+                'bbox_outside_weights_stage_1'
             ],
             'loss_bbox_stage_1',
             scale=model.GetLossScale()
         )
         loss_gradients = blob_utils.get_loss_gradients(model, [loss_cls_stage_1, loss_bbox_stage_1])
-        model.Accuracy(['cls_prob_stage_1', 'labels_stage_1'], 'accuracy_cls_stage_1')
+        model.Accuracy(['cls_prob_stage_1', 'labels_int32'], 'accuracy_cls_stage_1')
         model.AddLosses(['loss_cls_stage_1', 'loss_bbox_stage_1'])
         model.AddMetrics('accuracy_cls_stage_1')
     elif i == 1:
@@ -206,8 +205,8 @@ def add_cascade_rcnn_losses(model, thresh, i):
         )
         loss_bbox_stage_2 = model.net.SmoothL1Loss(
             [
-                'bbox_pred_stage_2', 'bbox_targets', 'bbox_inside_weights',
-                'bbox_outside_weights'
+                'bbox_pred_stage_2', 'bbox_targets_stage_2', 'bbox_inside_weights_stage_2',
+                'bbox_outside_weights_stage_2'
             ],
             'loss_bbox_stage_2',
             scale=model.GetLossScale()
@@ -217,15 +216,15 @@ def add_cascade_rcnn_losses(model, thresh, i):
         model.AddLosses(['loss_cls_stage_2', 'loss_bbox_stage_2'])
         model.AddMetrics('accuracy_cls_stage_2')
     elif i == 2:
-        get_labels(model, i)
+        #_sample_labels(model, i)
         cls_prob_stage_3, loss_cls_stage_3 = model.net.SoftmaxWithLoss(
             ['cls_score_stage_3', 'labels_stage_3'], ['cls_prob_stage_3', 'loss_cls_stage_3'],
             scale=model.GetLossScale()
         )
         loss_bbox_stage_3 = model.net.SmoothL1Loss(
             [
-                'bbox_pred_stage_3', 'bbox_targets', 'bbox_inside_weights',
-                'bbox_outside_weights'
+                'bbox_pred_stage_3', 'bbox_targets_stage_3', 'bbox_inside_weights_stage_3',
+                'bbox_outside_weights_stage_3'
             ],
             'loss_bbox_stage_3',
             scale=model.GetLossScale()
@@ -236,7 +235,6 @@ def add_cascade_rcnn_losses(model, thresh, i):
         model.AddMetrics('accuracy_cls_stage_3')        
 
     return loss_gradients
-
 
 def get_labels(model, i):
     workspace.ResetWorkspace()
@@ -366,12 +364,18 @@ def add_cascade_rcnn_head(model, blob_in, dim_in, spatial_scale, i):
         model.Relu('fc7_stage_1', 'fc7_stage_1')
         output = 'fc7_stage_1'
     elif i == 1:
-        # map bbox_pred_stage_1 to fpn conv feature map
-        add_multilevel_pred_box_blob(model, blob_in, "bbox_pred_stage_1")
+        # map bbox_pred_stage_1 to fpn conv f roi_size = cfg.FAST_RCNN.ROI_XFORM_RESOLUTION
+        #add_multilevel_pred_box_blob(model, blob_in, "bbox_pred_stage_1")
+        if model.train:
+            # Add op that generates training labels for in-network RPN proposals
+            model.GenerateProposalLabels_cascade_rcnn(['bbox_pred_stage_1', 'roidb', 'im_info'], i)
+        else:
+            # Alias rois to rpn_rois for inference
+            model.net.Alias('bbox_pred_stage_1', 'rois')
         roi_feat_stage_2 = model.RoIFeatureTransform(
             blob_in,
             'roi_feat_stage_2',
-            blob_rois='bbox_pred_stage_1',
+            blob_rois='bbox_pred_stage_1', # post_nms_topN 
             method=cfg.FAST_RCNN.ROI_XFORM_METHOD,
             resolution=roi_size,
             sampling_ratio=cfg.FAST_RCNN.ROI_XFORM_SAMPLING_RATIO,
@@ -383,7 +387,13 @@ def add_cascade_rcnn_head(model, blob_in, dim_in, spatial_scale, i):
         model.Relu('fc7_stage_2', 'fc7_stage_2')
         output = 'fc7_stage_2'
     elif i == 2:
-        add_multilevel_pred_box_blob(model, blob_in, 'bbox_pred_stage_2')
+        #add_multilevel_pred_box_blob(model, blob_in, 'bbox_pred_stage_2')
+        if model.train:
+            # Add op that generates training labels for in-network RPN proposals
+            model.GenerateProposalLabels_cascade_rcnn(['bbox_pred_stage_2', 'roidb', 'im_info'], i)
+        else:
+            # Alias rois to rpn_rois for inference
+            model.net.Alias('bbox_pred_stage_2', 'rois')
         roi_feat_stage_3 = model.RoIFeatureTransform(
             blob_in,
             'roi_feat_stage_3',
