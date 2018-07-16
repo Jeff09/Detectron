@@ -52,11 +52,14 @@ class GenerateProposals_cascade_rcnn_Op(object):
 
         # predicted probability of fg object for each RPN anchor
         scores = inputs[0].data
+        print('score shape: ', scores.shape)
         # predicted achors transformations
         bboxes = inputs[1].data
+        print("bboxes shapes: ", bboxes.shape)
         # input image (height, width, scale), in which scale is the scale factor
         # applied to the original dataset image to get the network input image
         im_info = inputs[2].data
+        print('im_info shape: ', im_info.shape)
         
         # Broacast anchors over shifts to enumerate all anchors at all positions
         # in the (H, W) grid:
