@@ -117,7 +117,7 @@ def add_cascade_rcnn_outputs(model, blob_in, dim, i):
         if not model.train:  # == if test
             # Only add softmax when testing; during training the softmax is combined
             # with the label cross entropy loss for numerical stability
-            model.Softmax('cls_score_stage_1', 'cls_prob', engine='CUDNN')
+            model.Softmax('cls_score_stage_1', 'cls_prob_stage_1', engine='CUDNN')
         # Box regression layer
         model.FC(
             blob_in,
@@ -188,8 +188,8 @@ def add_cascade_rcnn_losses(model, thresh, i):
         )
         loss_bbox_stage_1 = model.net.SmoothL1Loss(
             [
-                'bbox_pred_stage_1', 'bbox_targets', 'bbox_inside_weights_stage_1',
-                'bbox_outside_weights_stage_1'
+                'bbox_pred_stage_1', 'bbox_targets', 'bbox_inside_weights',
+                'bbox_outside_weights'
             ],
             'loss_bbox_stage_1',
             scale=model.GetLossScale()
