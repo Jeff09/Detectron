@@ -36,6 +36,7 @@ from detectron.ops.generate_proposal_labels import GenerateProposalLabelsOp
 from detectron.ops.generate_proposal_labels_stage_2 import GenerateProposalLabels_stage_2_Op
 from detectron.ops.generate_proposal_labels_stage_3 import GenerateProposalLabels_stage_3_Op
 from detectron.ops.generate_proposals import GenerateProposalsOp
+from detectron.ops.generate_proposals_cascade_rcnn import GenerateProposals_cascade_rcnn_Op
 import detectron.roi_data.fast_rcnn as fast_rcnn_roi_data
 import detectron.roi_data.cascade_rcnn as cascade_rcnn_roi_data
 import detectron.utils.c2 as c2_utils
@@ -138,6 +139,39 @@ class DetectionModelHelper(cnn.CNNModelHelper):
         self.net.Python(
             GenerateProposalsOp(anchors, spatial_scale, self.train).forward
         )(blobs_in, blobs_out, name=name, spatial_scale=spatial_scale)
+        return blobs_out
+
+    def GenerateProposals_cascade_rcnn(self, blobs_in, blobs_out):
+        """Op for generating RPN porposals.
+
+        blobs_in:
+          - 'rpn_cls_probs': 4D tensor of shape (N, A, H, W), where N is the
+            number of minibatch images, A is the number of anchors per
+            locations, and (H, W) is the spatial size of the prediction grid.
+            Each value represents a "probability of object" rating in [0, 1].
+          - 'rpn_bbox_pred': 4D tensor of shape (N, 4 * A, H, W) of predicted
+            boxes.
+          - 'im_info': 2D tensor of shape (N, 3) where the three columns encode
+            the input image's [height, width, scale]. Height and width are
+            for the input to the network, not the original image; scale is the
+            scale factor used to scale the original image to the network input
+            size.
+
+        blobs_out:
+          - 'rpn_rois': 2D tensor of shape (R, 5), for R RPN proposals where the
+            five columns encode [batch ind, x1, y1, x2, y2]. The boxes are
+            w.r.t. the network input, which is a *scaled* version of the
+            original image; these proposals must be scaled by 1 / scale (where
+            scale comes from im_info; see above) to transform it back to the
+            original input image coordinate system.
+          - 'rpn_roi_probs': 1D tensor of objectness probability scores
+            (extracted from rpn_cls_probs; see above).
+        """
+        name = 'GenerateProposals_cascade_rcnn_Op:' + ','.join([str(b) for b in blobs_in])
+        # spatial_scale passed to the Python op is only used in convert_pkl_to_pb
+        self.net.Python(
+            GenerateProposals_cascade_rcnn_Op(self.train).forward
+        )(blobs_in, blobs_out)
         return blobs_out
 
     def GenerateProposalLabels(self, blobs_in):
