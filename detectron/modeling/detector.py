@@ -303,8 +303,11 @@ class DetectionModelHelper(cnn.CNNModelHelper):
         )
 
         # Prepare output blobs
-        blobs_out = fast_rcnn_roi_data.get_fast_rcnn_blob_names(
-            is_training=self.train
+        #blobs_out = fast_rcnn_roi_data.get_fast_rcnn_blob_names(
+        #    is_training=self.train
+        #)
+        blobs_out = fast_rcnn_roi_data.get_cascade_fast_rcnn_blob_names(
+            is_training=self.train, stage_num=1
         )
         blobs_out = [core.ScopedBlobReference(b) for b in blobs_out]
 
