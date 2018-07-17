@@ -65,8 +65,7 @@ def combined_roidb_for_training(dataset_names, proposal_files):
     roidb = filter_for_training(roidb)
 
     logger.info('Computing bounding-box regression targets...')
-    #add_bbox_regression_targets(roidb)
-    add_bbox_regression_targets(roidb, 1)
+    add_bbox_regression_targets(roidb)
     logger.info('done')
 
     _compute_and_log_stats(roidb)
@@ -136,21 +135,10 @@ def filter_for_training(roidb):
                 format(num - num_after, num, num_after))
     return filtered_roidb
 
-def add_bbox_regression_targets(roidb, stage_num):
+def add_bbox_regression_targets(roidb):
     """Add information needed to train bounding-box regressors."""
-    if stage_num == 1:
-        bbox_targets = 'bbox_target_1st'
-    elif stage_num == 2:
-        bbox_targets = 'bbox_target_2nd'
-    elif stage_num == 3:
-        bbox_targets = 'bbox_target_3rd'
     for entry in roidb:
-        entry[bbox_targets] = compute_bbox_regression_targets(entry)
-
-#def add_bbox_regression_targets(roidb):
-#    """Add information needed to train bounding-box regressors."""
-#    for entry in roidb:
-#        entry['bbox_targets'] = compute_bbox_regression_targets(entry)
+        entry['bbox_targets'] = compute_bbox_regression_targets(entry)
 
 
 def compute_bbox_regression_targets(entry):

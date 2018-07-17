@@ -53,7 +53,7 @@ class DistributeFpnRpnProposalsOp(object):
             im_scales = im_info[:, 2]
             roidb = blob_utils.deserialize(inputs[1].data)
             json_dataset.add_proposals(roidb, rois, im_scales, crowd_thresh=0)
-            roidb_utils.add_bbox_regression_targets(roidb, self._stage_num)
+            roidb_utils.add_bbox_regression_targets(roidb)
 
             # Compute training labels for the RPN proposals; also handles
             # distributing the proposals over FPN levels
