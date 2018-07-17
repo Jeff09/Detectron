@@ -57,9 +57,12 @@ class CollectAndDistributeFpnRpnProposalsOp(object):
             roidb_utils.add_bbox_regression_targets(roidb)
             # Compute training labels for the RPN proposals; also handles
             # distributing the proposals over FPN levels
-            output_blob_names = fast_rcnn_roi_data.get_fast_rcnn_blob_names()
+            #output_blob_names = fast_rcnn_roi_data.get_fast_rcnn_blob_names()
+            output_blob_names = fast_rcnn_roi_data.get_cascade_fast_rcnn_blob_names(
+                is_training=self._train, stage_num=1)
             blobs = {k: [] for k in output_blob_names}
-            fast_rcnn_roi_data.add_fast_rcnn_blobs(blobs, im_scales, roidb)
+            #fast_rcnn_roi_data.add_fast_rcnn_blobs(blobs, im_scales, roidb)
+            fast_rcnn_roi_data.add_fast_rcnn_blobs(blobs, im_scales, roidb, 1)
             for i, k in enumerate(output_blob_names):
                 blob_utils.py_op_copy_blob(blobs[k], outputs[i])
         else:
