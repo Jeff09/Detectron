@@ -65,7 +65,8 @@ def combined_roidb_for_training(dataset_names, proposal_files):
     roidb = filter_for_training(roidb)
 
     logger.info('Computing bounding-box regression targets...')
-    add_bbox_regression_targets(roidb)
+    #add_bbox_regression_targets(roidb)
+    add_bbox_regression_targets(roidb, 1)
     logger.info('done')
 
     _compute_and_log_stats(roidb)
