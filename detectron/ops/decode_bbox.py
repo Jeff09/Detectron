@@ -22,10 +22,10 @@ from __future__ import unicode_literals
 
 import numpy as np
 
-from detectron_cascade.core.config import cfg
-from detectron_cascade.datasets import json_dataset
-import detectron_cascade.utils.blob as blob_utils
-import detectron_cascade.utils.boxes as box_utils
+from detectron.core.config import cfg
+from detectron.datasets import json_dataset
+import detectron.utils.blob as blob_utils
+import detectron.utils.boxes as box_utils
 
 
 class DecodeBBoxOp(object):

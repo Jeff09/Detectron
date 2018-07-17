@@ -27,12 +27,12 @@ import logging
 import numpy as np
 import numpy.random as npr
 
-from detectron_cascade.core.config import cfg
-import detectron_cascade.modeling.FPN as fpn
-import detectron_cascade.roi_data.keypoint_rcnn as keypoint_rcnn_roi_data
-import detectron_cascade.roi_data.mask_rcnn as mask_rcnn_roi_data
-import detectron_cascade.utils.blob as blob_utils
-import detectron_cascade.utils.boxes as box_utils
+from detectron.core.config import cfg
+import detectron.modeling.FPN as fpn
+import detectron.roi_data.keypoint_rcnn as keypoint_rcnn_roi_data
+import detectron.roi_data.mask_rcnn as mask_rcnn_roi_data
+import detectron.utils.blob as blob_utils
+import detectron.utils.boxes as box_utils
 
 logger = logging.getLogger(__name__)
 

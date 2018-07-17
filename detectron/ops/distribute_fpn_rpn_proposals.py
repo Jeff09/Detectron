@@ -22,12 +22,12 @@ from __future__ import unicode_literals
 
 import numpy as np
 
-from detectron_cascade.core.config import cfg
-from detectron_cascade.datasets import json_dataset
-from detectron_cascade.datasets import roidb as roidb_utils
-import detectron_cascade.modeling.FPN as fpn
-import detectron_cascade.roi_data.fast_rcnn as fast_rcnn_roi_data
-import detectron_cascade.utils.blob as blob_utils
+from detectron.core.config import cfg
+from detectron.datasets import json_dataset
+from detectron.datasets import roidb as roidb_utils
+import detectron.modeling.FPN as fpn
+import detectron.roi_data.fast_rcnn as fast_rcnn_roi_data
+import detectron.utils.blob as blob_utils
 
 
 class DistributeFpnRpnProposalsOp(object):

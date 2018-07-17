@@ -52,8 +52,8 @@ import os
 import os.path as osp
 import yaml
 
-from detectron_cascade.utils.collections import AttrDict
-from detectron_cascade.utils.io import cache_url
+from detectron.utils.collections import AttrDict
+from detectron.utils.io import cache_url
 
 logger = logging.getLogger(__name__)
 
@@ -1070,7 +1070,7 @@ _RENAMED_KEYS = {
 # (e.g. from weights files) you can specify the renamed module below.
 # ---------------------------------------------------------------------------- #
 _RENAMED_MODULES = {
-    'utils.collections': 'detectron_cascade.utils.collections',
+    'utils.collections': 'detectron.utils.collections',
 } # !!~!!~!~!~!~!!~!~!~!~!~!~!
 
 

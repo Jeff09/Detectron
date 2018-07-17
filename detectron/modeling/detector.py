@@ -40,9 +40,9 @@ from detectron.ops.generate_proposals_cascade_rcnn import GenerateProposals_casc
 import detectron.roi_data.fast_rcnn as fast_rcnn_roi_data
 import detectron.roi_data.cascade_rcnn as cascade_rcnn_roi_data
 import detectron.utils.c2 as c2_utils
-from detectron_cascade.ops.distribute_fpn_rpn_proposals \
+from detectron.ops.distribute_fpn_rpn_proposals \
     import DistributeFpnRpnProposalsOp
-from detectron_cascade.ops.decode_bbox \
+from detectron.ops.decode_bbox \
     import DecodeBBoxOp
 
 logger = logging.getLogger(__name__)
