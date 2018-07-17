@@ -38,7 +38,7 @@ CASCADERCNN:
   BBOX_REG_WEIGHTS_STAGE2: (20., 20., 10., 10.)
   BBOX_REG_WEIGHTS_STAGE3: (30., 30., 15., 15.)
 TRAIN:
-  WEIGHTS: ./weights/X-152-32x8d-IN5k.pkl #/home/user/workspace/detectron_models/pretrained/R-50.pkl
+  WEIGHTS: https://s3-us-west-2.amazonaws.com/detectron/ImageNetPretrained/25093814/X-152-32x8d-IN5k.pkl #./weights/X-152-32x8d-IN5k.pkl #/home/user/workspace/detectron_models/pretrained/R-50.pkl
   DATASETS: ('coco_2014_train',)
   SCALES: (800,)
   MAX_SIZE: 1632
