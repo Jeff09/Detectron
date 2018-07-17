@@ -135,11 +135,21 @@ def filter_for_training(roidb):
                 format(num - num_after, num, num_after))
     return filtered_roidb
 
-
-def add_bbox_regression_targets(roidb):
+def add_bbox_regression_targets(roidb, stage_num):
     """Add information needed to train bounding-box regressors."""
+    if stage_num == 1:
+        bbox_targets = 'bbox_target_1st'
+    elif stage_num == 2:
+        bbox_targets = 'bbox_target_2nd'
+    elif stage_num == 3:
+        bbox_targets = 'bbox_target_3rd'
     for entry in roidb:
-        entry['bbox_targets'] = compute_bbox_regression_targets(entry)
+        entry[bbox_targets] = compute_bbox_regression_targets(entry)
+
+#def add_bbox_regression_targets(roidb):
+#    """Add information needed to train bounding-box regressors."""
+#    for entry in roidb:
+#        entry['bbox_targets'] = compute_bbox_regression_targets(entry)
 
 
 def compute_bbox_regression_targets(entry):
