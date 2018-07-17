@@ -447,6 +447,23 @@ def _add_class_assignments(roidb):
         assert all(max_classes[nonzero_inds] != 0)
 
 
+def reset_roidb_for_next_stage(roidbs):
+    for i, entry in enumerate(roidbs):
+        # screen out max_overlaps, gt_classes, bbox_targets
+        entry.pop('max_overlaps')
+        entry.pop('max_classes')
+        entry.pop('bbox_targets')
+
+        # re-initialize boxes, seg_areas, gt_classes, gt_overlaps
+        num_gt = len(entry['segms'])
+        entry['boxes']             = entry['boxes'][0:num_gt, :]
+        entry['seg_areas']         = entry['seg_areas'][0:num_gt]
+        entry['gt_classes']        = entry['gt_classes'][0:num_gt]
+        entry['gt_overlaps']       = entry['gt_overlaps'][0:num_gt, :]
+        entry['box_to_gt_ind_map'] = entry['box_to_gt_ind_map'][0:num_gt]
+    return roidbs
+
+
 def _sort_proposals(proposals, id_field):
     """Sort proposals by the specified id field."""
     order = np.argsort(proposals[id_field])

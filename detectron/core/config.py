@@ -52,8 +52,8 @@ import os
 import os.path as osp
 import yaml
 
-from detectron.utils.collections import AttrDict
-from detectron.utils.io import cache_url
+from detectron_cascade.utils.collections import AttrDict
+from detectron_cascade.utils.io import cache_url
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +70,9 @@ cfg = __C
 # Training options
 # ---------------------------------------------------------------------------- #
 __C.TRAIN = AttrDict()
+
+# threshold to screen out high iou boxes in decode bbox operator
+__C.TRAIN.GT_IOU_THR = 0.95
 
 # Initialize network with weights from this .pkl file
 __C.TRAIN.WEIGHTS = b''
@@ -134,12 +137,6 @@ __C.TRAIN.PROPOSAL_FILES = ()
 # faster)
 __C.TRAIN.ASPECT_GROUPING = True
 
-# Cascade RCNN 
-__C.TRAIN.CASCADE_RCNN = False
-
-# Cascade IoU thresholds
-__C.TRAIN.CASCADE_THRESHOLDS = 0.5, 0.6, 0.7
-
 # ---------------------------------------------------------------------------- #
 # RPN training options
 # ---------------------------------------------------------------------------- #
@@ -193,10 +190,7 @@ __C.TRAIN.FREEZE_CONV_BODY = False
 
 # Training will resume from the latest snapshot (model checkpoint) found in the
 # output directory
-__C.TRAIN.AUTO_RESUME = False
-
-# Add StopGrad at a specified stage so the bottom layers are frozen
-__C.TRAIN.FREEZE_AT = 2
+__C.TRAIN.AUTO_RESUME = True
 
 
 # ---------------------------------------------------------------------------- #
@@ -488,6 +482,9 @@ __C.MODEL.RPN_ONLY = False
 # Use 'prof_dag' to get profiling statistics
 __C.MODEL.EXECUTION_TYPE = b'dag'
 
+# Use cascade rcnn
+__C.MODEL.CASCADE_RCNN = True
+__C.MODEL.NUM_RCNN_STAGE = 0
 
 # ---------------------------------------------------------------------------- #
 # RetinaNet options
@@ -734,6 +731,17 @@ __C.FPN.EXTRA_CONV_LEVELS = False
 # Use GroupNorm in the FPN-specific layers (lateral, etc.)
 __C.FPN.USE_GN = False
 
+# ---------------------------------------------------------------------------- #
+# Cascade R-CNN options ("CASCADERCNN" means Mask R-CNN)
+# ---------------------------------------------------------------------------- #
+__C.CASCADERCNN = AttrDict()
+
+__C.CASCADERCNN.WEIGHT_LOSS_BBOX_STAGE1 = 1.0
+__C.CASCADERCNN.WEIGHT_LOSS_BBOX_STAGE2 = 1.0
+__C.CASCADERCNN.WEIGHT_LOSS_BBOX_STAGE3 = 1.0
+__C.CASCADERCNN.BBOX_REG_WEIGHTS_STAGE1 = (10., 10., 5., 5.)
+__C.CASCADERCNN.BBOX_REG_WEIGHTS_STAGE2 = (10., 10., 5., 5.)
+__C.CASCADERCNN.BBOX_REG_WEIGHTS_STAGE3 = (10., 10., 5., 5.)
 
 # ---------------------------------------------------------------------------- #
 # Mask R-CNN options ("MRCNN" means Mask R-CNN)
@@ -785,7 +793,7 @@ __C.MRCNN.THRESH_BINARIZE = 0.5
 
 
 # ---------------------------------------------------------------------------- #
-# Keypoint Mask R-CNN options ("KRCNN" = Mask R-CNN with Keypoint support)
+# Keyoint Mask R-CNN options ("KRCNN" = Mask R-CNN with Keypoint support)
 # ---------------------------------------------------------------------------- #
 __C.KRCNN = AttrDict()
 
@@ -997,7 +1005,7 @@ __C.CLUSTER.ON_CLUSTER = False
 # If an option is removed from the code and you don't want to break existing
 # yaml configs, you can add the full config key as a string to the set below.
 # ---------------------------------------------------------------------------- #
-_DEPRECATED_KEYS = set(
+_DEPCRECATED_KEYS = set(
     {
         'FINAL_MSG',
         'MODEL.DILATION',
@@ -1062,8 +1070,8 @@ _RENAMED_KEYS = {
 # (e.g. from weights files) you can specify the renamed module below.
 # ---------------------------------------------------------------------------- #
 _RENAMED_MODULES = {
-    'utils.collections': 'detectron.utils.collections',
-}
+    'utils.collections': 'detectron_cascade.utils.collections',
+} # !!~!!~!~!~!~!!~!~!~!~!~!~!
 
 
 def assert_and_infer_cfg(cache_urls=True, make_immutable=True):
@@ -1198,7 +1206,7 @@ def _merge_a_into_b(a, b, stack=None):
 
 
 def _key_is_deprecated(full_key):
-    if full_key in _DEPRECATED_KEYS:
+    if full_key in _DEPCRECATED_KEYS:
         logger.warn(
             'Deprecated config key (ignoring): {}'.format(full_key)
         )

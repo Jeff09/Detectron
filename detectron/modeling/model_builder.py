@@ -198,11 +198,12 @@ def build_generic_detection_model(
 
         if not cfg.MODEL.RPN_ONLY:
             # Add the Fast R-CNN head
-            if cfg.TRAIN.CASCADE_RCNN:
-                head_loss_gradients = _add_cascade_rcnn_head(
-                model, blob_conv, dim_conv,
-                spatial_scale_conv
-            )
+            if cfg.MODEL.CASCADE_RCNN:
+                # Add the Cascade Fast R-CNN head
+                head_loss_gradients['box'] = _add_cascade_fast_rcnn_head(
+                    model, add_roi_box_head_func, blob_conv, dim_conv,
+                    spatial_scale_conv, cfg.MODEL.NUM_RCNN_STAGE
+                )
             else:
                 head_loss_gradients['box'] = _add_fast_rcnn_head(
                     model, add_roi_box_head_func, blob_conv, dim_conv,
@@ -287,7 +288,39 @@ def _add_cascade_rcnn_head(
     else:
         return None
     
-    
+def _add_cascade_fast_rcnn_head(
+    model, add_roi_box_head_func, blob_in, dim_in, spatial_scale_in, num_rcnn_stage
+):
+    """Add a cascade Fast R-CNN head to the model."""
+    if model.train:
+        loss_gradients = {}
+    else:
+        loss_gradients = None
+
+    blob_frcns, dim_frcn = add_roi_box_head_func(
+        model, blob_in, dim_in, spatial_scale_in, 1,
+    )
+    fast_rcnn_heads.add_cascade_fast_rcnn_outputs(model, blob_frcns, dim_frcn, 1)
+    if model.train:
+        _loss_gradients = fast_rcnn_heads.add_cascade_fast_rcnn_losses(model, 1)
+        loss_gradients.update(_loss_gradients)
+    else:
+        pass
+
+    for i in range(num_rcnn_stage - 1):
+        model.DecodeBBox(stage_num=i + 1)
+        model.DistributeFpnRpnProposals(stage_num=i + 2)
+        blob_frcns, dim_frcn = add_roi_box_head_func(
+            model, blob_in, dim_in, spatial_scale_in, i + 2
+        )
+        fast_rcnn_heads.add_cascade_fast_rcnn_outputs(model, blob_frcns, dim_frcn, i + 2)
+        if model.train:
+            _loss_gradients = fast_rcnn_heads.add_cascade_fast_rcnn_losses(model, i + 2)
+            loss_gradients.update(_loss_gradients)
+        else:
+            pass
+
+    return loss_gradients    
 
 
 

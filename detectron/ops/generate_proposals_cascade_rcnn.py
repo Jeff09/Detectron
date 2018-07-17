@@ -51,14 +51,14 @@ class GenerateProposals_cascade_rcnn_Op(object):
         # 8. return the top proposals
 
         # predicted probability of fg object for each RPN anchor
-        scores = inputs[0].data
+        scores = inputs[0].data # 512 x 3
         print('score shape: ', scores.shape)
         # predicted achors transformations
-        bboxes = inputs[1].data
+        bboxes = inputs[1].data # 512 x 12
         print("bboxes shapes: ", bboxes.shape)
         # input image (height, width, scale), in which scale is the scale factor
         # applied to the original dataset image to get the network input image
-        im_info = inputs[2].data
+        im_info = inputs[2].data # 1 x 3
         print('im_info shape: ', im_info.shape)
         
         # Broacast anchors over shifts to enumerate all anchors at all positions
@@ -100,7 +100,7 @@ class GenerateProposals_cascade_rcnn_Op(object):
         min_size = cfg[cfg_key].RPN_MIN_SIZE
         # Transpose and reshape predicted bbox transformations to get them
         # into the same order as the anchors:
-        #   - bbox deltas will be (4 * A, H, W) format from conv output
+        #   - bbox will be (4 * A, H, W) format from conv output
         #   - transpose to (H, W, 4 * A)
         #   - reshape to (H * W * A, 4) where rows are ordered by (H, W, A)
         #     in slowest to fastest order to match the enumerated anchors
