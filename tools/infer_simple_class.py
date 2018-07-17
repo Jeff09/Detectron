@@ -123,13 +123,13 @@ def main(args):
     dummy_wider_dataset = wider_datasets.get_wider_dataset()
 
     INFER_BOX_ALPHA = 0.3
-    INFER_THRESH = 0.4
+    INFER_THRESH = 0.3
     INFER_KP_THRESH = 2
     if "model_iter" in args.weights:
         # MODEL_ITER = str(re.match(r"(.*)model_iter(.*)\.pkl", args.weights).group(2))
         MODEL_ITER = str(re.match(r"(.*)model_iter(.*)\.pkl", args.weights).group(2))
     else:
-        MODEL_ITER = "180000"
+        MODEL_ITER = "260000"
 
     logger.info("Model Iter: {}".format(MODEL_ITER))
 
@@ -149,7 +149,7 @@ def main(args):
         submit_mode = "default"
 
     submit_result = []
-    result_file_name = 'detectron_{}_result_{}_{}_' \
+    result_file_name = 'detectron_class_{}_result_{}_{}_' \
                        'NMS_{}_SOFT_NMS_{}_RPN_NMS_THRESH_{}_PRE_NMS_{}_' \
                        'POST_NMS_{}_BBOX_AUG_{}_' \
                        'Thresh_{}_BoxNumber.txt'.format(
@@ -191,7 +191,7 @@ def main(args):
                 'rest (caches and auto-tuning need to warm up)'
             )
 
-        result = vis_utils.vis_one_image_bbox_2_class(
+        result = vis_utils.vis_one_image_bbox_classes(
             im[:, :, ::-1],  # BGR -> RGB for visualization
             im_name,
             args.output_dir,
