@@ -159,18 +159,18 @@ def im_detect_bbox(model, im, target_scale, target_max_size, boxes=None):
 
     # Read out blobs
     if cfg.MODEL.FASTER_RCNN:
-        rois = workspace.FetchBlob(core.ScopedName('rois'))
+        rois = workspace.FetchBlob(core.ScopedName('rois_3rd'))
         # unscale back to raw image space
         boxes = rois[:, 1:5] / im_scale
 
     # Softmax class probabilities
-    scores = workspace.FetchBlob(core.ScopedName('cls_prob')).squeeze()
+    scores = workspace.FetchBlob(core.ScopedName('cls_prob_3rd')).squeeze()
     # In case there is 1 proposal
     scores = scores.reshape([-1, scores.shape[-1]])
 
     if cfg.TEST.BBOX_REG:
         # Apply bounding-box regression deltas
-        box_deltas = workspace.FetchBlob(core.ScopedName('bbox_pred')).squeeze()
+        box_deltas = workspace.FetchBlob(core.ScopedName('bbox_pred_3rd')).squeeze()
         # In case there is 1 proposal
         box_deltas = box_deltas.reshape([-1, box_deltas.shape[-1]])
         if cfg.MODEL.CLS_AGNOSTIC_BBOX_REG:
