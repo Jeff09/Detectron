@@ -97,6 +97,29 @@ def add_fast_rcnn_losses(model):
     model.AddMetrics('accuracy_cls')
     return loss_gradients
 
+def add_fast_rcnn_focal_losses(model):
+    """Add losses for RoI classification and bounding box regression. Only take post_nms_topN rois to calculate the loss."""
+    
+    loss_cls, cls_prob = model.net.SoftmaxFocalLoss(
+        ['cls_score', 'labels_int32', 'fg_num'], ['loss_cls', 'cls_prob'],
+        scale=model.GetLossScale(),
+        gamma=cfg.RETINANET.LOSS_GAMMA,
+        alpha=cfg.RETINANET.LOSS_ALPHA,
+        num_classes=model.num_classes
+    )
+    loss_bbox = model.net.SmoothL1Loss(
+        [
+            'bbox_pred', 'bbox_targets', 'bbox_inside_weights',
+            'bbox_outside_weights'
+        ],
+        'loss_bbox',
+        scale=model.GetLossScale()
+    )
+    loss_gradients = blob_utils.get_loss_gradients(model, [loss_cls, loss_bbox])
+    model.Accuracy(['cls_prob', 'labels_int32'], 'accuracy_cls')
+    model.AddLosses(['loss_cls', 'loss_bbox'])
+    model.AddMetrics('accuracy_cls')
+    return loss_gradients
 
 def add_cascade_rcnn_outputs(model, blob_in, dim, i):
     # Box classification layer
