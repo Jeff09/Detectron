@@ -46,6 +46,7 @@ def get_fast_rcnn_blob_names(is_training=True):
     if is_training:
         # labels_int32 blob: R categorical labels in [0, ..., K] for K
         # foreground classes plus background
+        blob_names += ['fg_num']
         blob_names += ['labels_int32']
     if is_training:
         # bbox_targets blob: R bounding-box regression targets with 4
@@ -108,11 +109,14 @@ def get_fast_rcnn_blob_names(is_training=True):
 def add_fast_rcnn_blobs(blobs, im_scales, roidb):
     """Add blobs needed for training Fast R-CNN style models."""
     # Sample training RoIs from each image and append them to the blob lists
+    blobs['fg_num'] = 0.0
     for im_i, entry in enumerate(roidb):
         frcn_blobs = _sample_rois(entry, im_scales[im_i], im_i)
+        blobs['fg_num'] += frcn_blobs['fg_rois_per_this_image']
         for k, v in frcn_blobs.items():
             blobs[k].append(v)
     # Concat the training blob lists into tensors
+    blobs['fg_num'] = blobs['fg_num'].astype(np.float32)
     for k, v in blobs.items():
         if isinstance(v, list) and len(v) > 0:
             blobs[k] = np.concatenate(v)
@@ -188,7 +192,8 @@ def _sample_rois(roidb, im_scale, batch_idx):
         rois=sampled_rois,
         bbox_targets=bbox_targets,
         bbox_inside_weights=bbox_inside_weights,
-        bbox_outside_weights=bbox_outside_weights
+        bbox_outside_weights=bbox_outside_weights,
+        fg_rois_per_this_image=fg_rois_per_this_image
     )
 
     # Optionally add Mask R-CNN blobs
