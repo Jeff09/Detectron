@@ -489,7 +489,7 @@ __C.MODEL.RPN_ONLY = False
 __C.MODEL.EXECUTION_TYPE = b'dag'
 
 # Use cascade rcnn
-__C.MODEL.CASCADE_RCNN = True
+__C.MODEL.CASCADE_RCNN = False
 __C.MODEL.NUM_RCNN_STAGE = 0
 
 # ---------------------------------------------------------------------------- #
