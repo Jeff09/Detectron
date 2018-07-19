@@ -268,25 +268,6 @@ def _add_fast_rcnn_head(
         loss_gradients = None
     return loss_gradients
 
-def _add_cascade_rcnn_head(
-    model, blob_in, dim_in, spatial_scale_in
-):
-    assert cfg.TRAIN.CASCADE_RCNN is True
-    """Add a Cascade R-CNN head to the model"""
-    # Fast R-CNN head to the model
-    thresholds = cfg.TRAIN.CASCADE_THRESHOLDS
-    assert len(thresholds) == 3
-    loss_gradients = {}
-    for i in range(len(thresholds)):
-        blob_frcn, dim_frcn = fast_rcnn_heads.add_cascade_rcnn_head(model, blob_in, dim_in, spatial_scale_in, i)
-        fast_rcnn_heads.add_cascade_rcnn_outputs(model, blob_frcn, dim_frcn, i)
-        if model.train:
-            loss = fast_rcnn_heads.add_cascade_rcnn_losses(model, int(thresholds[i]), i)
-            loss_gradients['box_stage_' + str(i)] = loss 
-    if model.train:
-        return loss_gradients
-    else:
-        return None
     
 def _add_cascade_fast_rcnn_head(
     model, add_roi_box_head_func, blob_in, dim_in, spatial_scale_in, num_rcnn_stage
@@ -321,7 +302,6 @@ def _add_cascade_fast_rcnn_head(
             pass
 
     return loss_gradients    
-
 
 
 def _add_roi_mask_head(
