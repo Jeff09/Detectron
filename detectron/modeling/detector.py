@@ -33,9 +33,17 @@ from detectron.core.config import cfg
 from detectron.ops.collect_and_distribute_fpn_rpn_proposals \
     import CollectAndDistributeFpnRpnProposalsOp
 from detectron.ops.generate_proposal_labels import GenerateProposalLabelsOp
+from detectron.ops.generate_proposal_labels_stage_2 import GenerateProposalLabels_stage_2_Op
+from detectron.ops.generate_proposal_labels_stage_3 import GenerateProposalLabels_stage_3_Op
 from detectron.ops.generate_proposals import GenerateProposalsOp
+from detectron.ops.generate_proposals_cascade_rcnn import GenerateProposals_cascade_rcnn_Op
 import detectron.roi_data.fast_rcnn as fast_rcnn_roi_data
+import detectron.roi_data.cascade_rcnn as cascade_rcnn_roi_data
 import detectron.utils.c2 as c2_utils
+from detectron.ops.distribute_fpn_rpn_proposals \
+    import DistributeFpnRpnProposalsOp
+from detectron.ops.decode_bbox \
+    import DecodeBBoxOp
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +145,39 @@ class DetectionModelHelper(cnn.CNNModelHelper):
         )(blobs_in, blobs_out, name=name, spatial_scale=spatial_scale)
         return blobs_out
 
+    def GenerateProposals_cascade_rcnn(self, blobs_in, blobs_out):
+        """Op for generating RPN porposals.
+
+        blobs_in:
+          - 'rpn_cls_probs': 4D tensor of shape (N, A, H, W), where N is the
+            number of minibatch images, A is the number of anchors per
+            locations, and (H, W) is the spatial size of the prediction grid.
+            Each value represents a "probability of object" rating in [0, 1].
+          - 'rpn_bbox_pred': 4D tensor of shape (N, 4 * A, H, W) of predicted
+            boxes.
+          - 'im_info': 2D tensor of shape (N, 3) where the three columns encode
+            the input image's [height, width, scale]. Height and width are
+            for the input to the network, not the original image; scale is the
+            scale factor used to scale the original image to the network input
+            size.
+
+        blobs_out:
+          - 'rpn_rois': 2D tensor of shape (R, 5), for R RPN proposals where the
+            five columns encode [batch ind, x1, y1, x2, y2]. The boxes are
+            w.r.t. the network input, which is a *scaled* version of the
+            original image; these proposals must be scaled by 1 / scale (where
+            scale comes from im_info; see above) to transform it back to the
+            original input image coordinate system.
+          - 'rpn_roi_probs': 1D tensor of objectness probability scores
+            (extracted from rpn_cls_probs; see above).
+        """
+        name = 'GenerateProposals_cascade_rcnn_Op:' + ','.join([str(b) for b in blobs_in])
+        # spatial_scale passed to the Python op is only used in convert_pkl_to_pb
+        self.net.Python(
+            GenerateProposals_cascade_rcnn_Op(self.train).forward
+        )(blobs_in, blobs_out)
+        return blobs_out
+
     def GenerateProposalLabels(self, blobs_in):
         """Op for generating training labels for RPN proposals. This is used
         when training RPN jointly with Fast/Mask R-CNN (as in end-to-end
@@ -167,6 +208,54 @@ class DetectionModelHelper(cnn.CNNModelHelper):
         self.net.Python(GenerateProposalLabelsOp().forward)(
             blobs_in, blobs_out, name=name
         )
+        return blobs_out
+    
+    def GenerateProposalLabels_cascade_rcnn(self, blobs_in, i):
+        """Op for generating training labels for RPN proposals. This is used
+        when training RPN jointly with Fast/Mask R-CNN (as in end-to-end
+        Faster R-CNN training).
+
+        blobs_in:
+          - 'rpn_rois': 2D tensor of RPN proposals output by GenerateProposals
+          - 'roidb': roidb entries that will be labeled
+          - 'im_info': See GenerateProposals doc.
+
+        blobs_out:
+          - (variable set of blobs): returns whatever blobs are required for
+            training the model. It does this by querying the data loader for
+            the list of blobs that are needed.
+        """
+        name = 'GenerateProposalLabels_cascade_rcnnOp:' + ','.join(
+            [str(b) for b in blobs_in]
+        )
+
+        # The list of blobs is not known before run-time because it depends on
+        # the specific model being trained. Query the data loader to get the
+        # list of output blob names.
+        if i == 1:
+            blobs_out = cascade_rcnn_roi_data.get_cascade_rcnn_stage_2_blob_names(
+                is_training=self.train
+            )
+        elif i == 2:
+            blobs_out = cascade_rcnn_roi_data.get_cascade_rcnn_stage_3_blob_names(
+                is_training=self.train
+            )
+        else:
+            raise ValueError('there is no stage ', i, ' get_cascade_rcnn_stage_', i, ' blob_name in fast_rcnn_roi_data')
+
+        blobs_out = [core.ScopedBlobReference(b) for b in blobs_out]
+
+        if i == 1:
+            self.net.Python(GenerateProposalLabels_stage_2_Op().forward)(
+                blobs_in, blobs_out, name=name
+            )
+        elif i == 2:
+            self.net.Python(GenerateProposalLabels_stage_3_Op().forward)(
+                blobs_in, blobs_out, name=name
+            )
+        else:
+            raise ValueError('there is no stage GenerateProposalLabels_stage_', i)
+
         return blobs_out
 
     def CollectAndDistributeFpnRpnProposals(self):
@@ -214,8 +303,11 @@ class DetectionModelHelper(cnn.CNNModelHelper):
         )
 
         # Prepare output blobs
-        blobs_out = fast_rcnn_roi_data.get_fast_rcnn_blob_names(
-            is_training=self.train
+        #blobs_out = fast_rcnn_roi_data.get_fast_rcnn_blob_names(
+        #    is_training=self.train
+        #)
+        blobs_out = fast_rcnn_roi_data.get_cascade_fast_rcnn_blob_names(
+            is_training=self.train, stage_num=1
         )
         blobs_out = [core.ScopedBlobReference(b) for b in blobs_out]
 
@@ -224,6 +316,100 @@ class DetectionModelHelper(cnn.CNNModelHelper):
         )(blobs_in, blobs_out, name=name)
 
         return outputs
+
+    def DecodeBBox(self, stage_num=0):
+        """decode cls_prob and bbox_pred feature maps, adding deltas onto rois
+        to generate new rois """
+
+        # Prepare input blobs
+        if stage_num == 1:
+            cls_prob_names = ['cls_score_1st']
+            bbox_pred_names = ['bbox_pred_1st']
+            rois_names = ['rois_1st']
+            if self.train:
+                overlaps_names = ['max_overlaps_1st']
+        elif stage_num == 2:
+            cls_prob_names = ['cls_score_2nd']
+            bbox_pred_names = ['bbox_pred_2nd']
+            rois_names = ['rois_2nd']
+            if self.train:
+                overlaps_names = ['max_overlaps_2nd']
+
+        if self.train:
+            blobs_in = cls_prob_names + bbox_pred_names + rois_names + overlaps_names
+        else:
+            blobs_in = cls_prob_names + bbox_pred_names + rois_names
+
+        blobs_in += ['im_info']
+        blobs_in = [core.ScopedBlobReference(b) for b in blobs_in]
+        name = 'DecodeBBoxOp:' + ','.join(
+            [str(b) for b in blobs_in]
+        )
+
+        # Prepare output blobs
+        if stage_num == 1:
+            blobs_out = ['rois_2nd_pre']
+        elif stage_num == 2:
+            blobs_out = ['rois_3rd_pre']
+        blobs_out = [core.ScopedBlobReference(b) for b in blobs_out]
+
+        outputs = self.net.Python(DecodeBBoxOp(self.train, stage_num).forward
+                                  )(blobs_in, blobs_out, name=name)
+
+        return outputs
+
+    def DistributeFpnRpnProposals(self, stage_num=2):
+        """Distribute proposals from former rcnn heads to their appropriate FPN levels.
+        An anchor at one FPN level may predict an RoI that will map to another level,
+        hence the need to redistribute the proposals.
+
+        This function assumes standard blob names for input and output blobs.
+
+        Input blobs: [rois_2nd/3rd, roi_scores_2nd/3rd]
+          - rois are the proposals
+          - roi_probs are the proposal objectness probabilities
+          see rpn_roi_probs documentation from GenerateProposals.
+
+        If used during training, then the input blobs will also include:
+          [roidb, im_info] (see GenerateProposalLabels).
+
+        Output blobs: [rois_fpn<min>, ..., rois_rpn<max>, rois,
+                       rois_idx_restore]
+          - rois_fpn<i> are the proposals for FPN level i
+          - rois_idx_restore is a permutation on the concatenation of all
+            rois_fpn<i>, i=min...max, such that when applied the RPN RoIs are
+            restored to their original order in the input blobs.
+
+        If used during training, then the output blobs will also include:
+          [labels, bbox_targets, bbox_inside_weights, bbox_outside_weights].
+        """
+        # Prepare input blobs
+        if stage_num == 2:
+            rois_names = ['rois_2nd_pre']
+        elif stage_num == 3:
+            rois_names = ['rois_3rd_pre']
+        blobs_in = rois_names
+        if self.train:
+            blobs_in += ['roidb', 'im_info']
+        blobs_in = [core.ScopedBlobReference(b) for b in blobs_in]
+        name = 'DistributeFpnRpnProposalsOp:' + ','.join(
+            [str(b) for b in blobs_in]
+        )
+
+        # Prepare output blobs
+        blobs_out = fast_rcnn_roi_data.get_cascade_fast_rcnn_blob_names(
+            is_training=self.train, stage_num=stage_num
+        )
+        blobs_out = [core.ScopedBlobReference(b) for b in blobs_out]
+
+        outputs = self.net.Python(
+            DistributeFpnRpnProposalsOp(self.train, stage_num).forward
+        )(blobs_in, blobs_out, name=name)
+
+        return outputs
+   
+
+
 
     def DropoutIfTraining(self, blob_in, dropout_rate):
         """Add dropout to blob_in if the model is in training mode and
@@ -335,6 +521,45 @@ class DetectionModelHelper(cnn.CNNModelHelper):
             blobs_in, blob_out, kernel=kernel, order=self.order, **kwargs
         )
 
+    def FCShared(
+        self,
+        blob_in,
+        blob_out,
+        dim_in,
+        dim_hidden,
+        weight=None,
+        bias=None,
+        **kwargs
+    ):
+        """Add fully connected op that shares weights and/or biases with another fully connected op.
+        """
+        use_bias = (
+            False if ('no_bias' in kwargs and kwargs['no_bias']) else True
+        )
+        use_bias = True
+
+        if self.use_cudnn:
+            kwargs['engine'] = 'CUDNN'
+            kwargs['exhaustive_search'] = self.cudnn_exhaustive_search
+            if self.ws_nbytes_limit:
+                kwargs['ws_nbytes_limit'] = self.ws_nbytes_limit
+
+        if use_bias:
+            blobs_in = [blob_in, weight, bias]
+        else:
+            blobs_in = [blob_in, weight]
+
+        if 'no_bias' in kwargs:
+            del kwargs['no_bias']
+
+        return self.net.FC(
+            blobs_in,
+            blob_out,
+            dim_in=dim_in,
+            dim_hidden=dim_hidden,
+            **kwargs
+        )
+
     def BilinearInterpolation(
         self, blob_in, blob_out, dim_in, dim_out, up_scale
     ):
@@ -380,6 +605,36 @@ class DetectionModelHelper(cnn.CNNModelHelper):
         self.do_not_update_params.append(self.weights[-1])
         self.do_not_update_params.append(self.biases[-1])
         return blob
+
+    def ConvAffine_v2(  # args in the same order of Conv()
+        self, blob_in, prefix, dim_in, dim_out, kernel, stride, pad,
+        group=1, dilation=1,
+        weight_init=None,
+        bias_init=None,
+        suffix='_bn',
+        inplace=False
+    ):
+        """ConvAffine adds a Conv op followed by a AffineChannel op (which
+        replaces BN during fine tuning).
+        """
+        conv_blob = self.Conv(
+            blob_in,
+            prefix+'_conv'+suffix,
+            dim_in,
+            dim_out,
+            kernel,
+            stride=stride,
+            pad=pad,
+            group=group,
+            dilation=dilation,
+            weight_init=weight_init,
+            bias_init=bias_init,
+            no_bias=1
+        )
+        blob_out = self.AffineChannel(
+            conv_blob, prefix + '_bn'+suffix, dim=dim_out, inplace=inplace
+        )
+        return blob_out    
 
     def ConvAffine(  # args in the same order of Conv()
         self, blob_in, prefix, dim_in, dim_out, kernel, stride, pad,

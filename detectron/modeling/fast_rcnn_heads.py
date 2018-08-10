@@ -40,6 +40,8 @@ import detectron.utils.blob as blob_utils
 import detectron.utils.boxes as box_utils
 from caffe2.python import core, workspace
 import numpy as np
+import detectron.modeling.FPN as fpn
+import os
 
 # ---------------------------------------------------------------------------- #
 # Fast R-CNN outputs and losses
@@ -75,7 +77,8 @@ def add_fast_rcnn_outputs(model, blob_in, dim):
 
 
 def add_fast_rcnn_losses(model):
-    """Add losses for RoI classification and bounding box regression."""
+    """Add losses for RoI classification and bounding box regression. Only take post_nms_topN rois to calculate the loss."""
+    
     cls_prob, loss_cls = model.net.SoftmaxWithLoss(
         ['cls_score', 'labels_int32'], ['cls_prob', 'loss_cls'],
         scale=model.GetLossScale()
@@ -94,17 +97,16 @@ def add_fast_rcnn_losses(model):
     model.AddMetrics('accuracy_cls')
     return loss_gradients
 
-
-def add_cascade_rcnn_outputs(model, blob_in, dim, i):
-    # Box classification layer
-    assert i < 3    
+def add_cascade_fast_rcnn_outputs(model, blobs_in, dim, stage_num):
+    """Add RoI classification and bounding box regression output ops."""
+    # Box regression layer
     num_bbox_reg_classes = (
         2 if cfg.MODEL.CLS_AGNOSTIC_BBOX_REG else model.num_classes
     )
-    if i == 0:
+    if stage_num == 1:
         model.FC(
-            blob_in,
-            'cls_score_stage_1',
+            blobs_in[0],
+            'cls_score_1st',
             dim,
             model.num_classes,
             weight_init=gauss_fill(0.01),
@@ -113,129 +115,181 @@ def add_cascade_rcnn_outputs(model, blob_in, dim, i):
         if not model.train:  # == if test
             # Only add softmax when testing; during training the softmax is combined
             # with the label cross entropy loss for numerical stability
-            model.Softmax('cls_score_stage_1', 'cls_prob', engine='CUDNN')
-        # Box regression layer
+            model.Softmax('cls_score_1st', 'cls_prob_1st', engine='CUDNN')
         model.FC(
-            blob_in,
-            'bbox_pred_stage_1',
+            blobs_in[0],
+            'bbox_pred_1st',
             dim,
             num_bbox_reg_classes * 4,
             weight_init=gauss_fill(0.001),
             bias_init=const_fill(0.0)
         )
-    elif i == 1:
-        model.FC(
-            blob_in,
-            'cls_score_stage_2',
-            dim,
-            model.num_classes,
-            weight_init=gauss_fill(0.01),
-            bias_init=const_fill(0.0)
-        )
-        if not model.train:  # == if test
-            # Only add softmax when testing; during training the softmax is combined
-            # with the label cross entropy loss for numerical stability
-            model.Softmax('cls_score_stage_2', 'cls_prob_stage_2', engine='CUDNN')
-        model.FC(
-            blob_in,
-            'bbox_pred_stage_2',
-            dim,
-            num_bbox_reg_classes * 4,
-            weight_init=gauss_fill(0.001),
-            bias_init=const_fill(0.0)
-        )
-    elif i == 2:
-        model.FC(
-            blob_in,
-            'cls_score_stage_3',
-            dim,
-            model.num_classes,
-            weight_init=gauss_fill(0.01),
-            bias_init=const_fill(0.0)
-        )
-        if not model.train:  # == if test
-            # Only add softmax when testing; during training the softmax is combined
-            # with the label cross entropy loss for numerical stability
-            model.Softmax('cls_score_stage_3', 'cls_prob_stage_3', engine='CUDNN')
-        model.FC(
-            blob_in,
-            'bbox_pred_stage_3',
-            dim,
-            num_bbox_reg_classes * 4,
-            weight_init=gauss_fill(0.001),
-            bias_init=const_fill(0.0)
-        )
-    
 
+    elif stage_num == 2:
+        model.FC(
+            blobs_in[0],
+            'cls_score_2nd',
+            dim,
+            model.num_classes,
+            weight_init=gauss_fill(0.01),
+            bias_init=const_fill(0.0)
+        )
+        if not model.train:  # == if test
+            # Only add softmax when testing; during training the softmax is combined
+            # with the label cross entropy loss for numerical stability
+            assert len(blobs_in) == 2, 'during inference, need fc2_2nd and fc2_1st_2nd as in put blobsin rcnn stage 2'
+            model.Softmax('cls_score_2nd', 'cls_prob_2nd_2nd', engine='CUDNN')
+            cls_prob_2nd_2nd = model.Softmax('cls_score_2nd', 'cls_prob_2nd_2nd', engine='CUDNN')
+            model.FCShared(
+                blobs_in[1],
+                'cls_score_1st_2nd',
+                dim,
+                model.num_classes,
+                weight='cls_score_1st_w',
+                bias='cls_score_1st_b'
+            )
+            cls_prob_1st_2nd = model.Softmax('cls_score_1st_2nd', 'cls_prob_1st_2nd', engine='CUDNN')
+            model.Sum([cls_prob_2nd_2nd, cls_prob_1st_2nd], 'cls_prob_2nd')
+            model.Scale('cls_prob_2nd', 'cls_prob_2nd', scale=0.5)
+        model.FC(
+            blobs_in[0],
+            'bbox_pred_2nd',
+            dim,
+            num_bbox_reg_classes * 4,
+            weight_init=gauss_fill(0.001),
+            bias_init=const_fill(0.0)
+        )
 
-def add_cascade_rcnn_losses(model, thresh, i):
-    assert i < 3   
-    if i == 0:
-        cls_prob_stage_1, loss_cls_stage_1 = model.net.SoftmaxWithLoss(
-            ['cls_score_stage_1', 'labels_int32'], ['cls_prob_stage_1', 'loss_cls_stage_1'],
-            scale=model.GetLossScale()
+    elif stage_num == 3:
+        model.FC(
+            blobs_in[0],
+            'cls_score_3rd',
+            dim,
+            model.num_classes,
+            weight_init=gauss_fill(0.01),
+            bias_init=const_fill(0.0)
         )
-        loss_bbox_stage_1 = model.net.SmoothL1Loss(
+        if not model.train:  # == if test
+            # Only add softmax when testing; during training the softmax is combined
+            # with the label cross entropy loss for numerical stability
+            assert len(blobs_in) == 3, 'during inference, need fc2_2nd and fc2_1st_2nd as in put blobsin rcnn stage 3'
+            model.Softmax('cls_score_3rd', 'cls_prob_3rd_3rd', engine='CUDNN')
+            cls_prob_3rd_3rd = model.Softmax('cls_score_3rd', 'cls_prob_3rd_3rd', engine='CUDNN')
+
+            model.FCShared(
+                blobs_in[1],
+                'cls_score_1st_3rd',
+                dim,
+                model.num_classes,
+                weight='cls_score_1st_w',
+                bias='cls_score_1st_b'
+            )
+            cls_prob_1st_3rd = model.Softmax('cls_score_1st_3rd', 'cls_prob_1st_3rd', engine='CUDNN')
+
+            model.FCShared(
+                blobs_in[2],
+                'cls_score_2nd_3rd',
+                dim,
+                model.num_classes,
+                weight='cls_score_2nd_w',
+                bias='cls_score_2nd_b'
+            )
+            cls_prob_2nd_3rd = model.Softmax('cls_score_2nd_3rd', 'cls_prob_2nd_3rd', engine='CUDNN')
+
+            model.Sum([cls_prob_1st_3rd, cls_prob_2nd_3rd, cls_prob_3rd_3rd], 'cls_prob_3rd')
+            model.Scale('cls_prob_3rd', 'cls_prob_3rd', scale=0.33333333)
+        model.FC(
+            blobs_in[0],
+            'bbox_pred_3rd',
+            dim,
+            num_bbox_reg_classes * 4,
+            weight_init=gauss_fill(0.001),
+            bias_init=const_fill(0.0)
+        )
+
+def add_cascade_fast_rcnn_losses(model, stage_num):
+    """Add losses for RoI classification and bounding box regression."""
+    if stage_num == 1:
+        cls_prob, loss_cls = model.net.SoftmaxWithLoss(
+            ['cls_score_1st', 'labels_int32_1st'], ['cls_prob_1st', 'loss_cls_1st'],
+            scale=model.GetLossScale() * cfg.CASCADERCNN.WEIGHT_LOSS_BBOX_STAGE1
+        )
+        loss_bbox = model.net.SmoothL1Loss(
             [
-                'bbox_pred_stage_1', 'bbox_targets', 'bbox_inside_weights',
-                'bbox_outside_weights'
+                'bbox_pred_1st', 'bbox_targets_1st', 'bbox_inside_weights_1st',
+                'bbox_outside_weights_1st'
             ],
-            'loss_bbox_stage_1',
-            scale=model.GetLossScale()
+            'loss_bbox_1st',
+            scale=model.GetLossScale() * cfg.CASCADERCNN.WEIGHT_LOSS_BBOX_STAGE1
         )
-        loss_gradients = blob_utils.get_loss_gradients(model, [loss_cls_stage_1, loss_bbox_stage_1])
-        model.Accuracy(['cls_prob_stage_1', 'labels_int32'], 'accuracy_cls_stage_1')
-        model.AddLosses(['loss_cls_stage_1', 'loss_bbox_stage_1'])
-        model.AddMetrics('accuracy_cls_stage_1')
-    elif i == 1:
-        #get_labels(i)      
-        cls_prob_stage_2, loss_cls_stage_2 = model.net.SoftmaxWithLoss(
-            ['cls_score_stage_2', 'labels_stage_2'], ['cls_prob_stage_2', 'loss_cls_stage_2'],
-            scale=model.GetLossScale()
+        loss_gradients = blob_utils.get_loss_gradients(model, [loss_cls, loss_bbox])
+        model.Accuracy(['cls_prob_1st', 'labels_int32_1st'], 'accuracy_cls_1st')
+        model.AddLosses(['loss_cls_1st', 'loss_bbox_1st'])
+        model.AddMetrics('accuracy_cls_1st')
+
+    elif stage_num == 2:
+        cls_prob, loss_cls = model.net.SoftmaxWithLoss(
+            ['cls_score_2nd', 'labels_int32_2nd'], ['cls_prob_2nd', 'loss_cls_2nd'],
+            scale=model.GetLossScale() * cfg.CASCADERCNN.WEIGHT_LOSS_BBOX_STAGE2
         )
-        loss_bbox_stage_2 = model.net.SmoothL1Loss(
+        loss_bbox = model.net.SmoothL1Loss(
             [
-                'bbox_pred_stage_2', 'bbox_targets', 'bbox_inside_weights',
-                'bbox_outside_weights'
+                'bbox_pred_2nd', 'bbox_targets_2nd', 'bbox_inside_weights_2nd',
+                'bbox_outside_weights_2nd'
             ],
-            'loss_bbox_stage_2',
-            scale=model.GetLossScale()
+            'loss_bbox_2nd',
+            scale=model.GetLossScale() * cfg.CASCADERCNN.WEIGHT_LOSS_BBOX_STAGE2
         )
-        loss_gradients = blob_utils.get_loss_gradients(model, [loss_cls_stage_2, loss_bbox_stage_2])
-        model.Accuracy(['cls_prob_stage_2', 'labels_stage_2'], 'accuracy_cls_stage_2')
-        model.AddLosses(['loss_cls_stage_2', 'loss_bbox_stage_2'])
-        model.AddMetrics('accuracy_cls_stage_2')
-    elif i == 2:
-        #get_labels(i)
-        cls_prob_stage_3, loss_cls_stage_3 = model.net.SoftmaxWithLoss(
-            ['cls_score_stage_3', 'labels_stage_3'], ['cls_prob_stage_3', 'loss_cls_stage_3'],
-            scale=model.GetLossScale()
+        loss_gradients = blob_utils.get_loss_gradients(model, [loss_cls, loss_bbox])
+        model.Accuracy(['cls_prob_2nd', 'labels_int32_2nd'], 'accuracy_cls_2nd')
+        model.AddLosses(['loss_cls_2nd', 'loss_bbox_2nd'])
+        model.AddMetrics('accuracy_cls_2nd')
+
+    elif stage_num == 3:
+        cls_prob, loss_cls = model.net.SoftmaxWithLoss(
+            ['cls_score_3rd', 'labels_int32_3rd'], ['cls_prob_3rd', 'loss_cls_3rd'],
+            scale=model.GetLossScale() * cfg.CASCADERCNN.WEIGHT_LOSS_BBOX_STAGE3
         )
-        loss_bbox_stage_3 = model.net.SmoothL1Loss(
+        loss_bbox = model.net.SmoothL1Loss(
             [
-                'bbox_pred_stage_3', 'bbox_targets', 'bbox_inside_weights',
-                'bbox_outside_weights'
+                'bbox_pred_3rd', 'bbox_targets_3rd', 'bbox_inside_weights_3rd',
+                'bbox_outside_weights_3rd'
             ],
-            'loss_bbox_stage_3',
-            scale=model.GetLossScale()
+            'loss_bbox_3rd',
+            scale=model.GetLossScale() * cfg.CASCADERCNN.WEIGHT_LOSS_BBOX_STAGE3
         )
-        loss_gradients = blob_utils.get_loss_gradients(model, [loss_cls_stage_3, loss_bbox_stage_3])
-        model.Accuracy(['cls_prob_stage_3', 'labels_stage_3'], 'accuracy_cls_stage_3')
-        model.AddLosses(['loss_cls_stage_3', 'loss_bbox_stage_3'])
-        model.AddMetrics('accuracy_cls_stage_3')        
+        loss_gradients = blob_utils.get_loss_gradients(model, [loss_cls, loss_bbox])
+        model.Accuracy(['cls_prob_3rd', 'labels_int32_3rd'], 'accuracy_cls_3rd')
+        model.AddLosses(['loss_cls_3rd', 'loss_bbox_3rd'])
+        model.AddMetrics('accuracy_cls_3rd')
 
     return loss_gradients
 
-def get_labels(i):    
-    label_boxes = workspace.FetchBlob(core.ScopedName("labels_int32"))
-    gt_boxes = workspace.FetchBlob("bbox_targets") 
-    pred_boxes_stage_1 = workspace.FetchBlob('bbox_pred_stage_'+str(i))
-    num_inside = pred_boxes_stage_1.shape[0]
+def get_labels(model, i):
+    workspace.ResetWorkspace()
+    workspace.RunNetOnce(model.param_init_net)
+    #print(str(model.param_init_net.Proto()))
+    #with open(os.path.join(os.getcwd(), "train_net.pbtxt"), 'w') as fid:
+    #    fid.write(str(model.net.Proto()))
+    #with open(os.path.join(os.getcwd(), "train_init_net.pbtxt"), 'w') as fid:
+    #    fid.write(str(model.param_init_net.Proto()))
+    roidb = workspace.FetchBlob(core.ScopedName("roidb"))
+    for entry in roidb:
+        print("roidb: ", entry.keys())
+        return
+    
+
+
+    #label_boxes = workspace.FetchBlob(core.ScopedName("labels_int32"))
+    #gt_boxes = workspace.FetchBlob(core.ScopedName("bbox_targets"))
+    pred_boxes = workspace.FetchBlob(core.ScopedName('bbox_pred_stage_'+str(i + 1)))
+    num_inside = pred_boxes.shape[0]
+
     labels = np.empty((num_inside, ), dtype=np.int32)
     labels.fill(0)
     if len(gt_boxes) > 0:
         # Compute overlaps between the anchors and the gt boxes overlaps
-        anchor_by_gt_overlap = box_utils.bbox_overlaps(pred_boxes_stage_1, gt_boxes)
+        anchor_by_gt_overlap = box_utils.bbox_overlaps(pred_boxes, gt_boxes)
         # Map from anchor to gt box that has highest overlap
         anchor_to_gt_argmax = anchor_by_gt_overlap.argmax(axis=1)
         # For each anchor, amount of overlap with most overlapping gt box
@@ -243,14 +297,27 @@ def get_labels(i):
                                                 anchor_to_gt_argmax]
         # Fg label: above threshold IOU
         labels = np.array([label_boxes[i] for i in anchor_to_gt_argmax], dtype=np.int32)
-    workspace.FeedBlob("labels_stage_"+str(i+1), labels)
+    workspace.FeedBlob(core.ScopedName("labels_stage_"+str(i+1)), labels)
+    #workspace.RunNet(model.net.Proto().name)
+    #workspace.RunNetOnce(model.param_init_net)
 
 
+def add_multilevel_pred_box_blob(model, blob_in, pred_boxes_name):
+    '''
+    Add pred box blobs for multiple FPN levels to the blobs dict.
+    parameters: 
+        blob_in: a dict mapping from blob name to numpy ndarray
+        pred_boxes_name: 'bbox_pred_stage_1' or bbox_pred_stage_2'
+    '''
+    workspace.RunNetOnce(model.param_init_net)
+    lvl_min = cfg.FPN.RPN_MIN_LEVEL
+    lvl_max = cfg.FPN.RPN_MAX_LEVEL
+    
+    pred_boxes_name = core.BlobReference(pred_boxes_name)
+    pred_boxes = workspace.FetchBlob(core.ScopedName(pred_boxes_name))
+    lvs = fpn.map_rois_to_fpn_levels(pred_boxes, lvl_min, lvl_max)
+    fpn.add_multilevel_roi_blobs(blob_in, pred_boxes_name, pred_boxes, lvs, lvl_min, lvl_max)
 
-
-# ---------------------------------------------------------------------------- #
-# Box heads
-# ---------------------------------------------------------------------------- #
 
 def add_cascade_rcnn_head(model, blob_in, dim_in, spatial_scale, i):
     """Add a ReLU MLP with two hidden layers."""
@@ -291,7 +358,7 @@ def add_cascade_rcnn_head(model, blob_in, dim_in, spatial_scale, i):
         roi_feat_stage_3 = model.RoIFeatureTransform(
             blob_in,
             'roi_feat_stage_3',
-            blob_rois='bbox_pred_stage_2',
+            blob_rois='rois_stage_3',
             method=cfg.FAST_RCNN.ROI_XFORM_METHOD,
             resolution=roi_size,
             sampling_ratio=cfg.FAST_RCNN.ROI_XFORM_SAMPLING_RATIO,
@@ -304,6 +371,81 @@ def add_cascade_rcnn_head(model, blob_in, dim_in, spatial_scale, i):
         output = 'fc7_stage_3'
     return output, hidden_dim
 
+# ---------------------------------------------------------------------------- #
+# Box heads
+# ---------------------------------------------------------------------------- #
+
+def add_roi_cascade_2mlp_head(model, blob_in, dim_in, spatial_scale, stage_num):
+    """Add cascade ReLU MLP with two hidden layers."""
+    hidden_dim = cfg.FAST_RCNN.MLP_HEAD_DIM
+    roi_size = cfg.FAST_RCNN.ROI_XFORM_RESOLUTION
+
+    if stage_num == 1:
+        roi_feat = model.RoIFeatureTransform(
+            blob_in,
+            'roi_feat_1st',
+            blob_rois='rois_1st',
+            method=cfg.FAST_RCNN.ROI_XFORM_METHOD,
+            resolution=roi_size,
+            sampling_ratio=cfg.FAST_RCNN.ROI_XFORM_SAMPLING_RATIO,
+            spatial_scale=spatial_scale
+        )
+        model.FC(roi_feat, 'fc1' + '_1st', dim_in * roi_size * roi_size, hidden_dim, weight_init=("MSRAFill", {}), bias_init=const_fill(0.0))
+        model.Relu('fc1' + '_1st', 'fc1' + '_1st')
+        model.FC('fc1' + '_1st', 'fc2' + '_1st', hidden_dim, hidden_dim, weight_init=("MSRAFill", {}), bias_init=const_fill(0.0))
+        model.Relu('fc2' + '_1st', 'fc2' + '_1st')
+        return ['fc2' + '_1st'], hidden_dim
+
+    elif stage_num == 2:
+        roi_feat = model.RoIFeatureTransform(
+            blob_in,
+            'roi_feat_2nd',
+            blob_rois='rois_2nd',
+            method=cfg.FAST_RCNN.ROI_XFORM_METHOD,
+            resolution=roi_size,
+            sampling_ratio=cfg.FAST_RCNN.ROI_XFORM_SAMPLING_RATIO,
+            spatial_scale=spatial_scale
+        )
+        model.FC(roi_feat, 'fc1' + '_2nd', dim_in * roi_size * roi_size, hidden_dim, weight_init=("MSRAFill", {}), bias_init=const_fill(0.0))
+        model.Relu('fc1' + '_2nd', 'fc1' + '_2nd')
+        model.FC('fc1' + '_2nd', 'fc2' + '_2nd', hidden_dim, hidden_dim, weight_init=("MSRAFill", {}), bias_init=const_fill(0.0))
+        model.Relu('fc2' + '_2nd', 'fc2' + '_2nd')
+
+        if not model.train:
+            model.FCShared(roi_feat, 'fc1' + '_1st' + '_2nd', dim_in * roi_size * roi_size, hidden_dim, weight='fc1_1st_w', bias='fc1_1st_b')
+            model.Relu('fc1' + '_1st' + '_2nd', 'fc1' + '_1st' + '_2nd')
+            model.FCShared('fc1' + '_1st' + '_2nd', 'fc2' + '_1st' + '_2nd', hidden_dim, hidden_dim, weight='fc2_1st_w', bias='fc2_1st_b')
+            model.Relu('fc2' + '_1st' + '_2nd', 'fc2' + '_1st' + '_2nd')
+        return ['fc2' + '_2nd', 'fc2' + '_1st' + '_2nd'], hidden_dim
+
+    elif stage_num == 3:
+        roi_feat = model.RoIFeatureTransform(
+            blob_in,
+            'roi_feat_3rd',
+            blob_rois='rois_3rd',
+            method=cfg.FAST_RCNN.ROI_XFORM_METHOD,
+            resolution=roi_size,
+            sampling_ratio=cfg.FAST_RCNN.ROI_XFORM_SAMPLING_RATIO,
+            spatial_scale=spatial_scale
+        )
+        model.FC(roi_feat, 'fc1' + '_3rd', dim_in * roi_size * roi_size, hidden_dim, weight_init=("MSRAFill", {}), bias_init=const_fill(0.0))
+        model.Relu('fc1' + '_3rd', 'fc1' + '_3rd')
+        model.FC('fc1' + '_3rd', 'fc2' + '_3rd', hidden_dim, hidden_dim, weight_init=("MSRAFill", {}), bias_init=const_fill(0.0))
+        model.Relu('fc2' + '_3rd', 'fc2' + '_3rd')
+
+        if not model.train:
+            model.FCShared(roi_feat, 'fc1' + '_1st' + '_3rd', dim_in * roi_size * roi_size, hidden_dim, weight='fc1_1st_w', bias='fc1_1st_b')
+            model.Relu('fc1' + '_1st' + '_3rd', 'fc1' + '_1st' + '_3rd')
+            model.FCShared('fc1' + '_1st' + '_3rd', 'fc2' + '_1st' + '_3rd', hidden_dim, hidden_dim, weight='fc2_1st_w', bias='fc2_1st_b')
+            model.Relu('fc2' + '_1st' + '_3rd', 'fc2' + '_1st' + '_3rd')
+
+            model.FCShared(roi_feat, 'fc1' + '_2nd' + '_3rd', dim_in * roi_size * roi_size, hidden_dim, weight='fc1_2nd_w', bias='fc1_2nd_b')
+            model.Relu('fc1' + '_2nd' + '_3rd', 'fc1' + '_2nd' + '_3rd')
+            model.FCShared('fc1' + '_2nd' + '_3rd', 'fc2' + '_2nd' + '_3rd', hidden_dim, hidden_dim, weight='fc2_2nd_w', bias='fc2_2nd_b')
+            model.Relu('fc2' + '_2nd' + '_3rd', 'fc2' + '_2nd' + '_3rd')
+        return ['fc2' + '_3rd', 'fc2' + '_1st' + '_2nd', 'fc2' + '_2nd' + '_3rd'], hidden_dim
+
+
 def add_roi_2mlp_head(model, blob_in, dim_in, spatial_scale):
     """Add a ReLU MLP with two hidden layers."""
     hidden_dim = cfg.FAST_RCNN.MLP_HEAD_DIM
@@ -311,7 +453,7 @@ def add_roi_2mlp_head(model, blob_in, dim_in, spatial_scale):
     roi_feat = model.RoIFeatureTransform(
         blob_in,
         'roi_feat',
-        blob_rois='rois',
+        blob_rois='rois', # post_nms_topN
         method=cfg.FAST_RCNN.ROI_XFORM_METHOD,
         resolution=roi_size,
         sampling_ratio=cfg.FAST_RCNN.ROI_XFORM_SAMPLING_RATIO,
@@ -354,6 +496,145 @@ def add_roi_Xconv2fc_head(model, blob_in, dim_in, spatial_scale):
     model.FC('fc6', 'fc7', fc_dim, fc_dim, weight_init=gauss_fill(0.01), bias_init=const_fill(0.0))
     model.Relu('fc7', 'fc7')
     return 'fc7', fc_dim
+
+def add_roi_cascade_Xconv1fc_gn_head(model, blob_in, dim_in, spatial_scale, stage_num):
+    """Add cascade X conv + 1fc head, with GroupNorm"""
+    hidden_dim = cfg.FAST_RCNN.CONV_HEAD_DIM
+    roi_size = cfg.FAST_RCNN.ROI_XFORM_RESOLUTION
+
+    if model.train:
+        if stage_num == 1:
+            roi_feat = model.RoIFeatureTransform(
+                blob_in, 'roi_feat_1st',
+                blob_rois='rois_1st',
+                method=cfg.FAST_RCNN.ROI_XFORM_METHOD,
+                resolution=roi_size,
+                sampling_ratio=cfg.FAST_RCNN.ROI_XFORM_SAMPLING_RATIO,
+                spatial_scale=spatial_scale
+            )
+
+            current = roi_feat
+            for i in range(cfg.FAST_RCNN.NUM_STACKED_CONVS):
+                current = model.ConvGN(
+                    current, 'head_conv' + str(i + 1) + '_1st', dim_in, hidden_dim, 3,
+                    group_gn=get_group_gn(hidden_dim),
+                    stride=1, pad=1,
+                    weight_init=('MSRAFill', {}),
+                    bias_init=('ConstantFill', {'value': 0.}))
+                current = model.Relu(current, current)
+                dim_in = hidden_dim
+
+            fc_dim = cfg.FAST_RCNN.MLP_HEAD_DIM
+            model.FC(current, 'fc6_1st', dim_in * roi_size * roi_size, fc_dim)
+            model.Relu('fc6_1st', 'fc6_1st')
+            return ['fc6_1st'], fc_dim
+
+        elif stage_num == 2:
+            roi_feat = model.RoIFeatureTransform(
+                blob_in, 'roi_feat_2nd',
+                blob_rois='rois_2nd',
+                method=cfg.FAST_RCNN.ROI_XFORM_METHOD,
+                resolution=roi_size,
+                sampling_ratio=cfg.FAST_RCNN.ROI_XFORM_SAMPLING_RATIO,
+                spatial_scale=spatial_scale
+            )
+
+            current = roi_feat
+            for i in range(cfg.FAST_RCNN.NUM_STACKED_CONVS):
+                current = model.ConvGN(
+                    current, 'head_conv' + str(i + 1) + '_2nd', dim_in, hidden_dim, 3,
+                    group_gn=get_group_gn(hidden_dim),
+                    stride=1, pad=1,
+                    weight_init=('MSRAFill', {}),
+                    bias_init=('ConstantFill', {'value': 0.}))
+                current = model.Relu(current, current)
+                dim_in = hidden_dim
+
+            fc_dim = cfg.FAST_RCNN.MLP_HEAD_DIM
+            model.FC(current, 'fc6_2nd', dim_in * roi_size * roi_size, fc_dim)
+            model.Relu('fc6_2nd', 'fc6_2nd')
+
+            if not model.train:
+                current_1st_2nd = roi_feat
+                for i in range(cfg.FAST_RCNN.NUM_STACKED_CONVS):
+                    current_1st_2nd = model.ConvGNShared(
+                        current_1st_2nd, 'head_conv' + str(i + 1) + '_1st_2nd', dim_in, hidden_dim, 3,
+                        group_gn=get_group_gn(hidden_dim),
+                        stride=1, pad=1,
+                        conv_weight_init='head_conv' + str(i + 1) + '_1st_w',
+                        conv_bias_init=('ConstantFill', {'value': 0.}),
+                        gn_bias_init='head_conv' + str(i + 1) + '_1st_b',
+                        gn_scale_innit='head_conv' + str(i + 1) + '_1st_s')
+                    current_1st_2nd = model.Relu(current_1st_2nd, current_1st_2nd)
+                    dim_in = hidden_dim
+
+                fc_dim = cfg.FAST_RCNN.MLP_HEAD_DIM
+                model.FCShared(current_1st_2nd, 'fc6_1st_2nd', dim_in * roi_size * roi_size, fc_dim)
+                model.Relu('fc6_1st_2nd', 'fc6_1st_2nd')
+            return ['fc6_2nd', 'fc6_1st_2nd'], fc_dim
+            # return ['fc6_2nd'], fc_dim
+
+        elif stage_num == 3:
+            roi_feat = model.RoIFeatureTransform(
+                blob_in, 'roi_feat_3rd',
+                blob_rois='rois_3rd',
+                method=cfg.FAST_RCNN.ROI_XFORM_METHOD,
+                resolution=roi_size,
+                sampling_ratio=cfg.FAST_RCNN.ROI_XFORM_SAMPLING_RATIO,
+                spatial_scale=spatial_scale
+            )
+
+            current = roi_feat
+            for i in range(cfg.FAST_RCNN.NUM_STACKED_CONVS):
+                current = model.ConvGN(
+                    current, 'head_conv' + str(i + 1) + '_3rd', dim_in, hidden_dim, 3,
+                    group_gn=get_group_gn(hidden_dim),
+                    stride=1, pad=1,
+                    weight_init=('MSRAFill', {}),
+                    bias_init=('ConstantFill', {'value': 0.}))
+                current = model.Relu(current, current)
+                dim_in = hidden_dim
+
+            fc_dim = cfg.FAST_RCNN.MLP_HEAD_DIM
+            model.FC(current, 'fc6_3rd', dim_in * roi_size * roi_size, fc_dim)
+            model.Relu('fc6_3rd', 'fc6_3rd')
+
+            if not model.train:
+                current_1st_3rd = roi_feat
+                for i in range(cfg.FAST_RCNN.NUM_STACKED_CONVS):
+                    current_1st_3rd = model.ConvGNShared(
+                        current_1st_3rd, 'head_conv' + str(i + 1) + '_1st_3rd', dim_in, hidden_dim, 3,
+                        group_gn=get_group_gn(hidden_dim),
+                        stride=1, pad=1,
+                        conv_weight_init='head_conv' + str(i + 1) + '_1st_w',
+                        conv_bias_init=('ConstantFill', {'value': 0.}),
+                        gn_bias_init='head_conv' + str(i + 1) + '_1st_b',
+                        gn_scale_innit='head_conv' + str(i + 1) + '_1st_s')
+                    current_1st_3rd = model.Relu(current_1st_3rd, current_1st_3rd)
+                    dim_in = hidden_dim
+
+                fc_dim = cfg.FAST_RCNN.MLP_HEAD_DIM
+                model.FCShared(current_1st_3rd, 'fc6_1st_3rd', dim_in * roi_size * roi_size, fc_dim)
+                model.Relu('fc6_1st_3rd', 'fc6_1st_3rd')
+
+                current_2nd_3rd = roi_feat
+                for i in range(cfg.FAST_RCNN.NUM_STACKED_CONVS):
+                    current_2nd_3rd = model.ConvGNShared(
+                        current_2nd_3rd, 'head_conv' + str(i + 1) + '_1st_3rd', dim_in, hidden_dim, 3,
+                        group_gn=get_group_gn(hidden_dim),
+                        stride=1, pad=1,
+                        conv_weight_init='head_conv' + str(i + 1) + '_1st_w',
+                        conv_bias_init=('ConstantFill', {'value': 0.}),
+                        gn_bias_init='head_conv' + str(i + 1) + '_2nd_b',
+                        gn_scale_innit='head_conv' + str(i + 1) + '_2nd_s'                    )
+                    current_2nd_3rd = model.Relu(current_2nd_3rd, current_2nd_3rd)
+                    dim_in = hidden_dim
+
+                fc_dim = cfg.FAST_RCNN.MLP_HEAD_DIM
+                model.FCShared(current_2nd_3rd, 'fc6_2nd_3rd', dim_in * roi_size * roi_size, fc_dim)
+                model.Relu('fc6_2nd_3rd', 'fc6_2nd_3rd')
+            return ['fc6_3rd', 'fc6_1st_3rd', 'fc6_2nd_3rd'], fc_dim
+            # return ['fc6_3rd'], fc_dim
 
 
 def add_roi_Xconv1fc_head(model, blob_in, dim_in, spatial_scale):

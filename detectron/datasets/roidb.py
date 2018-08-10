@@ -135,7 +135,6 @@ def filter_for_training(roidb):
                 format(num - num_after, num, num_after))
     return filtered_roidb
 
-
 def add_bbox_regression_targets(roidb):
     """Add information needed to train bounding-box regressors."""
     for entry in roidb:

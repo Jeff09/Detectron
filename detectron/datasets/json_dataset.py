@@ -43,6 +43,7 @@ from detectron.core.config import cfg
 from detectron.utils.timer import Timer
 import detectron.datasets.dataset_catalog as dataset_catalog
 import detectron.utils.boxes as box_utils
+import detectron.utils.segms as segm_utils
 
 logger = logging.getLogger(__name__)
 
@@ -167,8 +168,8 @@ class JsonDataset(object):
         width = entry['width']
         height = entry['height']
         for obj in objs:
-            # crowd regions are RLE encoded and stored as dicts
-            if isinstance(obj['segmentation'], list):
+            # crowd regions are RLE encoded
+            if segm_utils.is_poly(obj['segmentation']):
                 # Valid polygons have >= 3 points, so require >= 6 coordinates
                 obj['segmentation'] = [
                     p for p in obj['segmentation'] if len(p) >= 6
@@ -444,6 +445,23 @@ def _add_class_assignments(roidb):
         # if max overlap > 0, the class must be a fg class (not class 0)
         nonzero_inds = np.where(max_overlaps > 0)[0]
         assert all(max_classes[nonzero_inds] != 0)
+
+
+def reset_roidb_for_next_stage(roidbs):
+    for i, entry in enumerate(roidbs):
+        # screen out max_overlaps, gt_classes, bbox_targets
+        entry.pop('max_overlaps')
+        entry.pop('max_classes')
+        entry.pop('bbox_targets')
+
+        # re-initialize boxes, seg_areas, gt_classes, gt_overlaps
+        num_gt = len(entry['segms'])
+        entry['boxes']             = entry['boxes'][0:num_gt, :]
+        entry['seg_areas']         = entry['seg_areas'][0:num_gt]
+        entry['gt_classes']        = entry['gt_classes'][0:num_gt]
+        entry['gt_overlaps']       = entry['gt_overlaps'][0:num_gt, :]
+        entry['box_to_gt_ind_map'] = entry['box_to_gt_ind_map'][0:num_gt]
+    return roidbs
 
 
 def _sort_proposals(proposals, id_field):

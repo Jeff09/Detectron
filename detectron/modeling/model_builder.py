@@ -198,14 +198,18 @@ def build_generic_detection_model(
 
         if not cfg.MODEL.RPN_ONLY:
             # Add the Fast R-CNN head
-            #head_loss_gradients['box'] = _add_fast_rcnn_head(
-            #    model, add_roi_box_head_func, blob_conv, dim_conv,
-            #    spatial_scale_conv
-            #)
-            head_loss_gradients['box'] = _add_cascade_rcnn_head(
-                model, blob_conv, dim_conv,
-                spatial_scale_conv
-            )
+            if cfg.MODEL.CASCADE_RCNN:
+                # Add the Cascade Fast R-CNN head
+                head_loss_gradients['box'] = _add_cascade_fast_rcnn_head(
+                    model, add_roi_box_head_func, blob_conv, dim_conv,
+                    spatial_scale_conv, cfg.MODEL.NUM_RCNN_STAGE
+                )
+            else:
+                head_loss_gradients['box'] = _add_fast_rcnn_head(
+                    model, add_roi_box_head_func, blob_conv, dim_conv,
+                    spatial_scale_conv
+                )
+            
 
         if cfg.MODEL.MASK_ON:
             # Add the mask head
@@ -264,27 +268,40 @@ def _add_fast_rcnn_head(
         loss_gradients = None
     return loss_gradients
 
-def _add_cascade_rcnn_head(
-    model, blob_in, dim_in, spatial_scale_in
+    
+def _add_cascade_fast_rcnn_head(
+    model, add_roi_box_head_func, blob_in, dim_in, spatial_scale_in, num_rcnn_stage
 ):
-    """Add a Cascade R-CNN head to the model"""
-    # Fast R-CNN head to the model
-    thresholds = cfg.TRAIN.CASCADE_THRESHOLDS
-    #thresholds = thresholds.split(",")
-    assert len(thresholds) == 3
-    loss_gradients = {}
-    for i in range(len(thresholds)):
-        blob_frcn, dim_frcn = fast_rcnn_heads.add_cascade_rcnn_head(model, blob_in, dim_in, spatial_scale_in, i)
-        fast_rcnn_heads.add_cascade_rcnn_outputs(model, blob_frcn, dim_frcn, i)
-        if model.train:
-            loss_gradients.update(fast_rcnn_heads.add_cascade_rcnn_losses(model, int(thresholds[i]), i))
+    """Add a cascade Fast R-CNN head to the model."""
     if model.train:
-        return loss_gradients
+        loss_gradients = {}
     else:
-        return None
-    
-    
+        loss_gradients = None
 
+    blob_frcns, dim_frcn = add_roi_box_head_func(
+        model, blob_in, dim_in, spatial_scale_in, 1,
+    )
+    fast_rcnn_heads.add_cascade_fast_rcnn_outputs(model, blob_frcns, dim_frcn, 1)
+    if model.train:
+        _loss_gradients = fast_rcnn_heads.add_cascade_fast_rcnn_losses(model, 1)
+        loss_gradients.update(_loss_gradients)
+    else:
+        pass
+
+    for i in range(num_rcnn_stage - 1):
+        model.DecodeBBox(stage_num=i + 1)
+        model.DistributeFpnRpnProposals(stage_num=i + 2)
+        blob_frcns, dim_frcn = add_roi_box_head_func(
+            model, blob_in, dim_in, spatial_scale_in, i + 2
+        )
+        fast_rcnn_heads.add_cascade_fast_rcnn_outputs(model, blob_frcns, dim_frcn, i + 2)
+        if model.train:
+            _loss_gradients = fast_rcnn_heads.add_cascade_fast_rcnn_losses(model, i + 2)
+            loss_gradients.update(_loss_gradients)
+        else:
+            pass
+
+    return loss_gradients    
 
 
 def _add_roi_mask_head(
